@@ -490,7 +490,7 @@ Kirigami.ApplicationWindow {
                         displayHint: Kirigami.DisplayHint.AlwaysHide
                     },
                     Kirigami.Action {
-                        text: i18n("About Easy Effects") // qmllint disable
+                        text: i18n("About %1", applicationName) // qmllint disable
                         icon.name: applicationId + "-symbolic"
                         displayHint: Kirigami.DisplayHint.AlwaysHide
                         onTriggered: {

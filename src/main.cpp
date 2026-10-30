@@ -489,13 +489,15 @@ int main(int argc, char* argv[]) {
     QApplication::setStyle(QStringLiteral("breeze"));
   }
 
-  // "org.kde.desktop" needs Plasma's style integration plugin (Breeze
-  // .colors files etc), none of which is installed on this minimal
-  // Hyprland desktop; it silently falls back to a hardcoded light theme
-  // and ignores the QPalette set above. "Fusion" follows QPalette
-  // directly, so it correctly picks up WinDoesNot's dark/light + accent.
+  // "org.kde.desktop" is the style that actually reads KColorScheme data
+  // (our installed WinDoesNotDark.colors, activated above) for Kirigami
+  // controls including buttons. An earlier attempt forced "Fusion" here to
+  // work around a QPalette-based theming hack that has since been replaced
+  // by the proper KColorSchemeManager::activateSchemeId() call above -
+  // Fusion doesn't know about KColorScheme at all and left buttons on
+  // generic un-themed white/gray. Back to the upstream default.
   if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
-    QQuickStyle::setStyle(QStringLiteral("Fusion"));
+    QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
   }
 
   QQmlApplicationEngine engine;
