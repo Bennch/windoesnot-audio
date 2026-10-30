@@ -1,0 +1,275 @@
+/**
+ * Copyright © 2025-2026 Wellington Wallace
+ *
+ * This file is part of Easy Effects.
+ *
+ * Easy Effects is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Easy Effects is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Easy Effects. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import ee.ui
+import org.kde.kirigami as Kirigami
+import org.kde.kirigamiaddons.formcard as FormCard
+
+Kirigami.ScrollablePage {
+    id: filterPage
+
+    required property string name
+    required property DbFilter pluginDB
+    required property EffectsBase pipelineInstance
+    property BackendFilter pluginBackend
+
+    function updateMeters() {
+        if (!pluginBackend)
+            return;
+
+        inputOutputLevels.setInputLevelLeft(pluginBackend.getInputLevelLeft());
+        inputOutputLevels.setInputLevelRight(pluginBackend.getInputLevelRight());
+        inputOutputLevels.setOutputLevelLeft(pluginBackend.getOutputLevelLeft());
+        inputOutputLevels.setOutputLevelRight(pluginBackend.getOutputLevelRight());
+    }
+
+    Component.onCompleted: {
+        pluginBackend = pipelineInstance.getPluginInstance(name);
+    }
+
+    ColumnLayout {
+        Kirigami.CardsLayout {
+            id: cardLayout
+
+            minimumColumnWidth: Kirigami.Units.gridUnit * 17
+            implicitWidth: cardLayout.maximumColumnWidth
+            uniformCellWidths: true
+
+            EeCard {
+                title: i18n("Controls") // qmllint disable
+
+                FormCard.FormComboBoxDelegate {
+                    id: type
+
+                    verticalPadding: Kirigami.Units.smallSpacing
+                    text: i18n("Type") // qmllint disable
+                    displayMode: FormCard.FormComboBoxDelegate.ComboBox
+                    currentIndex: filterPage.pluginDB.type
+                    editable: false
+                    model: [i18nc("Filter type", "Low-pass"), i18nc("Filter type", "High-pass"), i18nc("Filter type", "Low-shelf"), i18nc("Filter type", "High-shelf"), i18nc("Filter type", "Bell"), i18nc("Filter type", "Bandpass"), i18nc("Filter type", "Notch"), i18nc("Filter type", "Resonance"), i18nc("Filter type", "Ladder-pass"), i18nc("Filter type", "Ladder-rejection"), i18nc("Filter type", "Allpass")] // qmllint disable
+                    onActivated: idx => {
+                        filterPage.pluginDB.type = idx;
+                    }
+                }
+
+                FormCard.FormComboBoxDelegate {
+                    id: mode
+
+                    verticalPadding: Kirigami.Units.smallSpacing
+                    text: i18n("Filter mode") // qmllint disable
+                    displayMode: FormCard.FormComboBoxDelegate.ComboBox
+                    currentIndex: filterPage.pluginDB.mode
+                    editable: false
+                    model: [i18nc("Filter mode", "RLC (BT)"), i18nc("Filter mode", "RLC (MT)"), i18nc("Filter mode", "BWC (BT)"), i18nc("Filter mode", "BWC (MT)"), i18nc("Filter mode", "LRX (BT)"), i18nc("Filter mode", "LRX (MT)"), i18nc("Filter mode", "APO (DR)")]
+                    onActivated: idx => {
+                        filterPage.pluginDB.mode = idx;
+                    }
+                }
+
+                FormCard.FormComboBoxDelegate {
+                    id: equalMode
+
+                    verticalPadding: Kirigami.Units.smallSpacing
+                    text: i18n("Equalizer mode") // qmllint disable
+                    displayMode: FormCard.FormComboBoxDelegate.ComboBox
+                    currentIndex: filterPage.pluginDB.equalMode
+                    editable: false
+                    model: [i18nc("Filter mode", "IIR"), i18nc("Filter mode", "FIR"), i18nc("Filter mode", "FFT"), i18nc("Filter mode", "SPM")]
+                    onActivated: idx => {
+                        filterPage.pluginDB.equalMode = idx;
+                    }
+                }
+
+                FormCard.FormComboBoxDelegate {
+                    id: decramp
+
+                    verticalPadding: Kirigami.Units.smallSpacing
+                    text: i18n("Equalizer decramping") // qmllint disable
+                    displayMode: FormCard.FormComboBoxDelegate.ComboBox
+                    currentIndex: filterPage.pluginDB.decramp
+                    editable: false
+                    model: [i18n("Off"), i18n("x2"), i18n("x3"), i18n("x4"), i18n("x6"), i18n("x8")]
+                    onActivated: idx => {
+                        filterPage.pluginDB.decramp = idx;
+                    }
+                }
+
+                FormCard.FormComboBoxDelegate {
+                    id: slope
+
+                    verticalPadding: Kirigami.Units.smallSpacing
+                    text: i18nc("Filter parameter", "Slope") // qmllint disable
+                    displayMode: FormCard.FormComboBoxDelegate.ComboBox
+                    currentIndex: filterPage.pluginDB.slope
+                    editable: false
+                    model: ["x1", "x2", "x3", "x4", "x6", "x8", "x12", "x16"]
+                    onActivated: idx => {
+                        filterPage.pluginDB.slope = idx;
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
+            }
+
+            EeCard {
+                title: i18n("Filter") // qmllint disable
+
+                EeSpinBox {
+                    id: frequency
+
+                    label: i18n("Frequency") // qmllint disable
+                    spinboxMaximumWidth: Kirigami.Units.gridUnit * 7
+                    from: filterPage.pluginDB.getMinValue("frequency")
+                    to: filterPage.pluginDB.getMaxValue("frequency")
+                    value: filterPage.pluginDB.frequency
+                    decimals: 2
+                    stepSize: 0.01
+                    unit: Units.hz
+                    onValueModified: v => {
+                        filterPage.pluginDB.frequency = v;
+                    }
+                }
+
+                EeSpinBox {
+                    id: width
+
+                    label: i18n("Width") // qmllint disable
+                    spinboxMaximumWidth: Kirigami.Units.gridUnit * 7
+                    from: filterPage.pluginDB.getMinValue("width")
+                    to: filterPage.pluginDB.getMaxValue("width")
+                    value: filterPage.pluginDB.width
+                    decimals: 0
+                    stepSize: 1
+                    onValueModified: v => {
+                        filterPage.pluginDB.width = v;
+                    }
+                }
+
+                EeSpinBox {
+                    id: gain
+
+                    label: i18n("Gain") // qmllint disable
+                    spinboxMaximumWidth: Kirigami.Units.gridUnit * 7
+                    from: filterPage.pluginDB.getMinValue("gain")
+                    to: filterPage.pluginDB.getMaxValue("gain")
+                    value: filterPage.pluginDB.gain
+                    decimals: 2
+                    stepSize: 0.01
+                    unit: Units.dB
+                    onValueModified: v => {
+                        filterPage.pluginDB.gain = v;
+                    }
+                }
+
+                EeSpinBox {
+                    id: quality
+
+                    label: i18n("Quality") // qmllint disable
+                    spinboxMaximumWidth: Kirigami.Units.gridUnit * 7
+                    from: filterPage.pluginDB.getMinValue("quality")
+                    to: filterPage.pluginDB.getMaxValue("quality")
+                    value: filterPage.pluginDB.quality
+                    decimals: 2
+                    stepSize: 0.01
+                    onValueModified: v => {
+                        filterPage.pluginDB.quality = v;
+                    }
+                }
+
+                EeSpinBox {
+                    id: balance
+
+                    label: i18n("Balance") // qmllint disable
+                    spinboxMaximumWidth: Kirigami.Units.gridUnit * 7
+                    from: filterPage.pluginDB.getMinValue("balance")
+                    to: filterPage.pluginDB.getMaxValue("balance")
+                    value: filterPage.pluginDB.balance
+                    decimals: 1
+                    stepSize: 0.1
+                    unit: Units.percent
+                    onValueModified: v => {
+                        filterPage.pluginDB.balance = v;
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
+            }
+        }
+    }
+
+    EeInputOutputGain {
+        id: inputOutputLevels
+
+        pluginDB: filterPage.pluginDB
+    }
+
+    header: inputOutputLevels
+
+    footer: RowLayout {
+        Controls.Label {
+            text: i18nc("Library in use (plugin credit)", "Using %1", `<strong>${PluginsPackage.lsp}</strong>`) // qmllint disable
+            textFormat: Text.RichText
+            horizontalAlignment: Qt.AlignLeft
+            verticalAlignment: Qt.AlignVCenter
+            Layout.fillWidth: false
+            Layout.leftMargin: Kirigami.Units.mediumSpacing * 2
+            Layout.rightMargin: Kirigami.Units.largeSpacing * 8
+            color: Kirigami.Theme.disabledTextColor
+        }
+
+        Kirigami.ActionToolBar {
+            Layout.margins: Kirigami.Units.smallSpacing
+            alignment: Qt.AlignRight
+            position: Controls.ToolBar.Footer
+            flat: true
+            actions: [
+                Kirigami.Action {
+                    displayHint: Kirigami.DisplayHint.KeepVisible
+                    text: i18n("Show native window") // qmllint disable
+                    icon.name: "window-duplicate-symbolic"
+                    enabled: DbMain.showNativePluginUi
+                    checkable: true
+                    checked: filterPage.pluginBackend ? filterPage.pluginBackend.hasNativeUi() : false
+                    onTriggered: {
+                        if (checked)
+                            filterPage.pluginBackend.showNativeUi();
+                        else
+                            filterPage.pluginBackend.closeNativeUi();
+                    }
+                },
+                Kirigami.Action {
+                    displayHint: Kirigami.DisplayHint.KeepVisible
+                    text: i18n("Reset") // qmllint disable
+                    icon.name: "edit-reset-symbolic"
+                    onTriggered: {
+                        filterPage.pluginBackend.reset();
+                    }
+                }
+            ]
+        }
+    }
+}

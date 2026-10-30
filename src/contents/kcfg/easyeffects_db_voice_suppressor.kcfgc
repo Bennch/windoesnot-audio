@@ -1,0 +1,11 @@
+File=easyeffects_db_voice_suppressor.kcfg
+ClassName=DbVoiceSuppressor
+Inherits=KConfigBaseEE
+IncludeFiles=\"kconfig_base_ee.hpp\"
+Mutators=true
+Notifiers=true
+DefaultValueGetters=true
+Singleton=false
+GenerateProperties=true
+QmlUncreatable=true
+QmlRegistration=true

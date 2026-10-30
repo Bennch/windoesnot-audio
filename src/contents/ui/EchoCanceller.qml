@@ -1,0 +1,195 @@
+/**
+ * Copyright © 2025-2026 Wellington Wallace
+ *
+ * This file is part of Easy Effects.
+ *
+ * Easy Effects is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Easy Effects is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Easy Effects. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import ee.ui
+import org.kde.kirigami as Kirigami
+import org.kde.kirigamiaddons.formcard as FormCard
+
+Kirigami.ScrollablePage {
+    id: echoCancellerPage
+
+    required property string name
+    required property DbEchoCanceller pluginDB
+    required property EffectsBase pipelineInstance
+    property BackendEchoCanceller pluginBackend
+
+    function updateMeters() {
+        if (!pluginBackend)
+            return;
+
+        inputOutputLevels.setInputLevelLeft(pluginBackend.getInputLevelLeft());
+        inputOutputLevels.setInputLevelRight(pluginBackend.getInputLevelRight());
+        inputOutputLevels.setOutputLevelLeft(pluginBackend.getOutputLevelLeft());
+        inputOutputLevels.setOutputLevelRight(pluginBackend.getOutputLevelRight());
+    }
+
+    Component.onCompleted: {
+        pluginBackend = pipelineInstance.getPluginInstance(name);
+    }
+
+    ColumnLayout {
+        Kirigami.CardsLayout {
+            id: cardLayout
+
+            Layout.fillWidth: true
+            maximumColumns: 3
+            uniformCellWidths: true
+
+            EeCard {
+                id: cardControls
+
+                title: i18n("Echo Canceller") // qmllint disable
+
+                EeSwitch {
+                    label: i18n("Enable") // qmllint disable
+                    isChecked: echoCancellerPage.pluginDB.enableEchoCanceller
+                    onCheckedChanged: {
+                        if (isChecked !== echoCancellerPage.pluginDB.enableEchoCanceller)
+                            echoCancellerPage.pluginDB.enableEchoCanceller = isChecked;
+                    }
+                }
+
+                EeSwitch {
+                    label: i18n("Mobile mode") // qmllint disable
+                    isChecked: echoCancellerPage.pluginDB.echoCancellerMobileMode
+                    onCheckedChanged: {
+                        if (isChecked !== echoCancellerPage.pluginDB.echoCancellerMobileMode)
+                            echoCancellerPage.pluginDB.echoCancellerMobileMode = isChecked;
+                    }
+                }
+
+                EeSwitch {
+                    label: i18n("Enforce high-pass") // qmllint disable
+                    isChecked: echoCancellerPage.pluginDB.echoCancellerEnforceHighPass
+                    onCheckedChanged: {
+                        if (isChecked !== echoCancellerPage.pluginDB.echoCancellerEnforceHighPass)
+                            echoCancellerPage.pluginDB.echoCancellerEnforceHighPass = isChecked;
+                    }
+                }
+            }
+
+            EeCard {
+                id: cardNoiseSuppression
+
+                title: i18n("Noise Suppression") // qmllint disable
+
+                EeSwitch {
+                    label: i18n("Enable") // qmllint disable
+                    isChecked: echoCancellerPage.pluginDB.enableNoiseSuppression
+                    onCheckedChanged: {
+                        if (isChecked !== echoCancellerPage.pluginDB.enableNoiseSuppression)
+                            echoCancellerPage.pluginDB.enableNoiseSuppression = isChecked;
+                    }
+                }
+
+                FormCard.FormComboBoxDelegate {
+                    verticalPadding: Kirigami.Units.smallUnit
+                    text: i18n("Strength") // qmllint disable
+                    displayMode: FormCard.FormComboBoxDelegate.ComboBox
+                    currentIndex: echoCancellerPage.pluginDB.noiseSuppressionLevel
+                    editable: false
+                    model: [i18nc("Echo canceller strength", "Low"), i18nc("Echo canceller strength", "Moderate"), i18nc("Echo canceller strength", "High"), i18nc("Echo canceller strength", "Very high")]
+                    onActivated: idx => {
+                        echoCancellerPage.pluginDB.noiseSuppressionLevel = idx;
+                    }
+                }
+            }
+
+            EeCard {
+                id: cardHighPass
+
+                title: i18n("High-Pass Filter") // qmllint disable
+
+                EeSwitch {
+                    label: i18n("Enable") // qmllint disable
+                    isChecked: echoCancellerPage.pluginDB.enableHighPassFilter
+                    onCheckedChanged: {
+                        if (isChecked !== echoCancellerPage.pluginDB.enableHighPassFilter)
+                            echoCancellerPage.pluginDB.enableHighPassFilter = isChecked;
+                    }
+                }
+
+                EeSwitch {
+                    label: i18n("Full band") // qmllint disable
+                    isChecked: echoCancellerPage.pluginDB.highPassFilterFullBand
+                    onCheckedChanged: {
+                        if (isChecked !== echoCancellerPage.pluginDB.highPassFilterFullBand)
+                            echoCancellerPage.pluginDB.highPassFilterFullBand = isChecked;
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
+            }
+        }
+    }
+
+    EeInputOutputGain {
+        id: inputOutputLevels
+
+        pluginDB: echoCancellerPage.pluginDB
+    }
+
+    header: inputOutputLevels
+
+    footer: RowLayout {
+        Controls.Label {
+            text: i18nc("Library in use (plugin credit)", "Using %1", `<strong>${PluginsPackage.webrtc}</b>`) // qmllint disable
+            textFormat: Text.RichText
+            horizontalAlignment: Qt.AlignLeft
+            verticalAlignment: Qt.AlignVCenter
+            Layout.fillWidth: false
+            Layout.leftMargin: Kirigami.Units.mediumSpacing * 2
+            Layout.rightMargin: Kirigami.Units.largeSpacing * 8
+            color: Kirigami.Theme.disabledTextColor
+        }
+
+        Kirigami.ActionToolBar {
+            Layout.margins: Kirigami.Units.smallSpacing
+            alignment: Qt.AlignRight
+            position: Controls.ToolBar.Footer
+            flat: true
+            actions: [
+                Kirigami.Action {
+                    text: i18n("Automatic gain control") // qmllint disable
+                    icon.name: "adjustlevels-symbolic"
+                    checkable: true
+                    checked: echoCancellerPage.pluginDB.enableAGC
+                    onTriggered: {
+                        if (echoCancellerPage.pluginDB.enableAGC !== checked)
+                            echoCancellerPage.pluginDB.enableAGC = checked;
+                    }
+                },
+                Kirigami.Action {
+                    displayHint: Kirigami.DisplayHint.KeepVisible
+                    text: i18n("Reset") // qmllint disable
+                    icon.name: "edit-reset-symbolic"
+                    onTriggered: {
+                        echoCancellerPage.pluginBackend.reset();
+                    }
+                }
+            ]
+        }
+    }
+}

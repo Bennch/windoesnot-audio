@@ -1,0 +1,91 @@
+# the checks with the hyphen prepended are disabled until they are fixed
+# some like clang-analyzer-osx* should stay disabled as they are not relevant, to improve performance somewhat
+Checks: 'bugprone-*,cert-*,clang-analyzer-*,concurrency-*,cppcoreguidelines-*,hicpp-*,misc-*,modernize-*,performance-*,portability-*,readability-*,
+  -bugprone-branch-clone,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -bugprone-narrowing-conversions,
+  -cert-dcl50-cpp,
+  -cert-err33-c,
+  -cert-err58-cpp,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  -clang-analyzer-osx*,
+  -clang-analyzer-optin.osx*,
+  -concurrency-mt-unsafe,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-narrowing-conversions,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-pro-type-cstyle-cast,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-special-member-functions,
+  -cppcoreguidelines-pro-type-member-init,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-const-cast,
+  -cppcoreguidelines-prefer-member-initializer,
+  -hicpp-vararg,
+  -hicpp-member-init,
+  -hicpp-special-member-functions,
+  -hicpp-signed-bitwise,
+  -hicpp-multiway-paths-covered,
+  -hicpp-no-array-decay,
+  -hicpp-avoid-c-arrays,
+  -hicpp-explicit-conversions,
+  -misc-const-correctness,
+  -misc-header-include-cycle,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  -misc-override-with-different-visibility,
+  -misc-unused-parameters,
+  -misc-use-anonymous-namespace,
+  -modernize-avoid-c-arrays,
+  -modernize-use-integer-sign-comparison,
+  -modernize-use-trailing-return-type,
+  -performance-inefficient-vector-operation,
+  -performance-unnecessary-value-param,
+  -performance-enum-size,
+  -portability-avoid-pragma-once,
+  -readability-else-after-return,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-function-cognitive-complexity,
+  -readability-magic-numbers,
+  -readability-non-const-parameter,
+  -readability-qualified-auto,
+  -bugprone-signed-bitwise,
+  '
+# todo, clang-analyzer-core.NullDereference is also suppressed in the code itself with NOLINT, consider fixing that too
+
+# the misc include ones (misc-header-include-cycle and misc-include-cleaner) can be useful, but in practice can be tricky to fix
+# as c/c++ header file behaviour can vary slightly with different compiler toolchains
+
+# todo these can all be fixed automatically but that needs to be done with caution
+# hicpp-explicit-conversions, misc-unused-parameter,modernize-use-trailing-return-type,readability-qualified-auto,readability-redundant-string-cstr,
+# readability-non-const-parameter,performance-unnecessary-value-param,cppcoreguidelines-prefer-member-initializer,readability-implicit-bool-conversion
+# performance-inefficient-vector-operation,readability-else-after-return
+
+CheckOptions:
+  # we don't want these to be passed by reference, even if (especially for shared_ptrs) it incurs a much greater cost
+  # since we either we use c apis like pipewire which clang-tidy/c++ cannot reason about (NodeInfo, LinkInfo, DeviceInfo),
+  # or we depend on shared_ptrs to work across multiple threads, notably when the caller finishes before the callee
+  performance-unnecessary-value-param.AllowedTypes: 'NodeInfo; LinkInfo; DeviceInfo; std::shared_ptr'
+
+# note some checks are disabled in the code itself by adding NOLINT(check-name) or NOLINTNEXTLINE(check-name)
+
+# treat clang diagnostic warnings (aka compiler warnings) as errors, to ensure CI fails on these warnings
+# note we can't completely suppress warnings like can be done for other checks above, they will always be outputted
+# these can however be suppressed by disabling the compiler warnings in meson, but that is not really what we want
+# we cannot ignore clang-diagnostic-error, which are just compilation errors, which will occur when using clang < 16 (clang-tidy always wants clang for compilation it seems)
+WarningsAsErrors: '*'
+
+# set this to the include directory specifically, not '.*' since we don't want generated files like config.h being scanned
+HeaderFilterRegex: '/src/.*(hpp)'

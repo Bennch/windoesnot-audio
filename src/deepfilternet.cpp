@@ -1,0 +1,385 @@
+/**
+ * Copyright © 2023-2026 Torge Matthies
+ *
+ * This file is part of Easy Effects.
+ *
+ * Easy Effects is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Easy Effects is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Easy Effects. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "deepfilternet.hpp"
+#include <qnamespace.h>
+#include <qobject.h>
+#include <algorithm>
+#include <format>
+#include <memory>
+#include <mutex>
+#include <span>
+#include <string>
+#include <vector>
+#include "db_manager.hpp"
+#include "easyeffects_db_deepfilternet.h"
+#include "ladspa_macros.hpp"
+#include "ladspa_wrapper.hpp"
+#include "pipeline_type.hpp"
+#include "plugin_base.hpp"
+#include "pw_manager.hpp"
+#include "resampler.hpp"
+#include "tags_plugin_name.hpp"
+#include "util.hpp"
+
+DeepFilterNet::DeepFilterNet(const std::string& tag,
+                             pw::Manager* pipe_manager,
+                             PipelineType pipe_type,
+                             QString instance_id)
+    : PluginBase(tag,
+                 tags::plugin_name::BaseName::deepfilternet,
+                 tags::plugin_package::Package::ee,
+                 instance_id,
+                 pipe_manager,
+                 pipe_type),
+      settings(db::Manager::self().get_plugin_db<DbDeepFilterNet>(
+          pipe_type,
+          tags::plugin_name::BaseName::deepfilternet + "#" + instance_id)) {
+  ladspa_wrapper = std::make_unique<ladspa::LadspaWrapper>("libdeep_filter_ladspa.so", "deep_filter_stereo");
+  dpdfnet_l = std::make_unique<ladspa::LadspaWrapper>("libdpdfnet_ladspa.so", "dpdfnet_mono");
+  dpdfnet_r = std::make_unique<ladspa::LadspaWrapper>("libdpdfnet_ladspa.so", "dpdfnet_mono");
+
+  deepFilterNetInstalled = ladspa_wrapper->found_plugin();
+  dpdfnetInstalled = dpdfnet_l->found_plugin() && dpdfnet_r->found_plugin();
+
+  packageInstalled = deepFilterNetInstalled || dpdfnetInstalled;
+
+  if (!deepFilterNetInstalled) {
+    util::debug(std::format("{}libdeep_filter_ladspa is not installed", log_tag));
+  }
+
+  if (!dpdfnetInstalled) {
+    util::debug(std::format("{}libdpdfnet_ladspa is not installed", log_tag));
+  }
+
+  init_common_controls<DbDeepFilterNet>(settings);
+
+  BIND_LADSPA_PORT("Post Filter Beta", postFilterBeta, setPostFilterBeta, DbDeepFilterNet::postFilterBetaChanged);
+  BIND_LADSPA_PORT("Min Processing Buffer (frames)", minProcessingBuffer, setMinProcessingBuffer,
+                   DbDeepFilterNet::minProcessingBufferChanged);
+
+  BIND_LADSPA_PORT_DB_EXPONENTIAL("Attenuation Limit (dB)", attenuationLimit, setAttenuationLimit,
+                                  DbDeepFilterNet::attenuationLimitChanged, false);
+  BIND_LADSPA_PORT_DB_EXPONENTIAL("Min processing threshold (dB)", minProcessingThreshold, setMinProcessingThreshold,
+                                  DbDeepFilterNet::minProcessingThresholdChanged, false);
+  BIND_LADSPA_PORT_DB_EXPONENTIAL("Max ERB processing threshold (dB)", maxErbProcessingThreshold,
+                                  setMaxErbProcessingThreshold, DbDeepFilterNet::maxErbProcessingThresholdChanged,
+                                  false);
+  BIND_LADSPA_PORT_DB_EXPONENTIAL("Max DF processing threshold (dB)", maxDfProcessingThreshold,
+                                  setMaxDfProcessingThreshold, DbDeepFilterNet::maxDfProcessingThresholdChanged, false);
+
+  // DPDFNet's attenuation port has the same 0-100 dB range as DeepFilterNet's, so the setting is shared
+  const auto set_dpdfnet_attenuation = [this] {
+    if (dpdfnetInstalled) {
+      dpdfnet_l->set_control_port_value_clamp("Attenuation Limit (dB)", settings->attenuationLimit());
+      dpdfnet_r->set_control_port_value_clamp("Attenuation Limit (dB)", settings->attenuationLimit());
+    }
+  };
+
+  set_dpdfnet_attenuation();
+
+  connect(settings, &DbDeepFilterNet::attenuationLimitChanged, this, set_dpdfnet_attenuation);
+
+  connect(settings, &DbDeepFilterNet::modelChanged, this, [this] { resetHistory(); });
+  connect(settings, &DbDeepFilterNet::monoProcessingChanged, this, [this] {
+    if (settings->model() == 1) {
+      resetHistory();
+    }
+  });
+}
+
+DeepFilterNet::~DeepFilterNet() {
+  stop_worker();
+
+  if (connected_to_pw) {
+    disconnect_from_pw();
+  }
+
+  settings->disconnect();
+
+  util::debug(std::format("{}{} destroyed", log_tag, name.toStdString()));
+}
+
+void DeepFilterNet::reset() {
+  settings->setDefaults();
+}
+
+void DeepFilterNet::clear_data() {
+  /*
+   * For some reason this plugin does not seem to destroy its threads properly. So recreating it often is a problem.
+   * See https://github.com/wwmm/easyeffects/issues/4652#issuecomment-4657311365
+   */
+
+  // {
+  //   if (ladspa_wrapper == nullptr) {
+  //     return;
+  //   }
+
+  //   std::scoped_lock<std::mutex> lock(data_mutex);
+
+  //   if (ready && ladspa_wrapper->has_instance()) {
+  //     ready = false;
+
+  //     ladspa_wrapper->destroy_instance();
+  //   }
+  // }
+
+  // setup();
+}
+
+void DeepFilterNet::setup() {
+  if (rate == 0 || n_samples == 0) {
+    // Some signals may be emitted before PipeWire calls our setup function
+    return;
+  }
+
+  std::scoped_lock<std::mutex> lock(data_mutex);
+
+  ready = false;
+  const auto generation = ++setup_generation;
+
+  use_dpdfnet = settings->model() == 1;
+  mono_processing = use_dpdfnet && settings->monoProcessing();
+
+  if (use_dpdfnet ? !dpdfnetInstalled : !deepFilterNetInstalled) {
+    util::warning(std::format("{}the selected model is not installed", log_tag));
+
+    return;
+  }
+
+  resample = rate != 48000;
+  resampler_ready = !resample;
+
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+
+  QMetaObject::invokeMethod(
+      baseWorker,
+      [this, dpdfnet = use_dpdfnet, mono = mono_processing, generation, block_size = n_samples] {
+        {
+          std::scoped_lock<std::mutex> lock(data_mutex);
+          if (generation != setup_generation) {
+            return;
+          }
+        }
+
+        // setup() can be called by PipeWire's process callback. Allocate here
+        // on the worker, and publish only when this configuration is ready.
+        std::vector<float> mono_buffer(mono ? block_size : 0U);
+
+        if (dpdfnet) {
+          dpdfnet_l->n_samples = n_samples;
+          dpdfnet_l->create_instance(48000);
+
+          if (mono) {
+            // A superseded stereo setup may already have created this instance.
+            dpdfnet_r->destroy_instance();
+          } else {
+            dpdfnet_r->n_samples = n_samples;
+            dpdfnet_r->create_instance(48000);
+          }
+        } else {
+          ladspa_wrapper->n_samples = n_samples;
+          ladspa_wrapper->create_instance(48000);
+        }
+
+        if (resample && !resampler_ready) {
+          resampler_inL = std::make_unique<Resampler>(rate, 48000);
+          resampler_inR = std::make_unique<Resampler>(rate, 48000);
+          resampler_outL = std::make_unique<Resampler>(48000, rate);
+          resampler_outR = std::make_unique<Resampler>(48000, rate);
+
+          std::vector<float> dummy(n_samples);
+
+          const auto resampled_inL = resampler_inL->process(dummy);
+          const auto resampled_inR = resampler_inR->process(dummy);
+
+          resampled_outL.resize(resampled_inL.size());
+          resampled_outR.resize(resampled_inR.size());
+
+          resampler_outL->process(resampled_inL);
+          resampler_outR->process(resampled_inR);
+
+          carryover_l.clear();
+          carryover_r.clear();
+          carryover_l.reserve(4);  // chosen by fair dice roll.
+          carryover_r.reserve(4);  // guaranteed to be random.
+          carryover_l.push_back(0.0F);
+          carryover_r.push_back(0.0F);
+
+          resampler_ready = true;
+        }
+
+        std::scoped_lock<std::mutex> lock(data_mutex);
+
+        // Rapid model/preset changes must not activate a superseded setup.
+        ready = generation == setup_generation;
+        if (ready) {
+          // Swap under the lock; the old buffer is freed after unlocking.
+          mono_input.swap(mono_buffer);
+        } else if (!ready) {
+          resampler_ready = false;
+        }
+      },
+      Qt::QueuedConnection);
+
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
+}
+
+void DeepFilterNet::process(std::span<float>& left_in,
+                            std::span<float>& right_in,
+                            std::span<float>& left_out,
+                            std::span<float>& right_out) {
+  std::scoped_lock<std::mutex> lock(data_mutex);
+
+  if (!ready || bypass) {
+    std::ranges::copy(left_in, left_out.begin());
+    std::ranges::copy(right_in, right_out.begin());
+
+    return;
+  }
+
+  if (input_gain != 1.0F) {
+    apply_gain(left_in, right_in, input_gain);
+  }
+
+  std::span<const float> model_inL = left_in;
+  std::span<const float> model_inR = right_in;
+
+  if (mono_processing) {
+    // Average before resampling, and before writing either output: PipeWire may
+    // provide in-place buffers. Duplicated mono retains its original level.
+    std::ranges::transform(left_in, right_in, mono_input.begin(),
+                           [](const float left, const float right) { return (0.5F * left) + (0.5F * right); });
+    model_inL = std::span<const float>(mono_input).first(left_in.size());
+    model_inR = model_inL;
+  }
+
+  if (resample) {
+    const auto& resampled_inL = resampler_inL->process(model_inL);
+    const auto& resampled_inR = resampler_inR->process(model_inR);
+
+    resampled_outL.resize(resampled_inL.size());
+    resampled_outR.resize(resampled_inR.size());
+
+    run_model(resampled_inL, resampled_inR, resampled_outL, resampled_outR);
+  } else {
+    run_model(model_inL, model_inR, left_out, right_out);
+  }
+
+  if (resample) {
+    const auto& outL = resampler_outL->process(resampled_outL);
+    const auto& outR = resampler_outR->process(resampled_outR);
+
+    const auto carryover_end_l = std::min(carryover_l.size(), left_out.size());
+    const auto carryover_end_r = std::min(carryover_r.size(), right_out.size());
+
+    const auto left_offset =
+        carryover_end_l + outL.size() > left_out.size() ? carryover_end_l : left_out.size() - outL.size();
+    const auto right_offset =
+        carryover_end_r + outR.size() > right_out.size() ? carryover_end_r : right_out.size() - outR.size();
+
+    const auto left_count = std::min(outL.size(), left_out.size() - left_offset);
+    const auto right_count = std::min(outR.size(), right_out.size() - right_offset);
+
+    std::copy(carryover_l.begin(), carryover_l.begin() + carryover_end_l, left_out.begin());
+    std::copy(carryover_r.begin(), carryover_r.begin() + carryover_end_r, right_out.begin());
+
+    carryover_l.erase(carryover_l.begin(), carryover_l.begin() + carryover_end_l);
+    carryover_r.erase(carryover_r.begin(), carryover_r.begin() + carryover_end_r);
+
+    std::fill(left_out.begin() + carryover_end_l, left_out.begin() + left_offset, 0);
+    std::fill(right_out.begin() + carryover_end_r, right_out.begin() + right_offset, 0);
+
+    std::copy(outL.begin(), outL.begin() + left_count, left_out.begin() + left_offset);
+    std::copy(outR.begin(), outR.begin() + right_count, right_out.begin() + right_offset);
+
+    carryover_l.insert(carryover_l.end(), outL.begin() + left_count, outL.end());
+    carryover_r.insert(carryover_r.end(), outR.begin() + right_count, outR.end());
+
+    std::fill(left_out.begin() + left_offset + left_count, left_out.end(), 0);
+    std::fill(right_out.begin() + right_offset + right_count, right_out.end(), 0);
+  }
+
+  if (output_gain != 1.0F) {
+    apply_gain(left_out, right_out, output_gain);
+  }
+
+  if (updateLevelMeters) {
+    get_peaks(left_in, right_in, left_out, right_out);
+  }
+}
+
+void DeepFilterNet::process([[maybe_unused]] std::span<float>& left_in,
+                            [[maybe_unused]] std::span<float>& right_in,
+                            [[maybe_unused]] std::span<float>& left_out,
+                            [[maybe_unused]] std::span<float>& right_out,
+                            [[maybe_unused]] std::span<float>& probe_left,
+                            [[maybe_unused]] std::span<float>& probe_right) {}
+
+auto DeepFilterNet::get_latency_seconds() -> float {
+  // DPDFNet reports a fixed 3840 samples at 48 kHz
+  return (settings->model() == 1 ? 0.08F : 0.02F) + (1.0F / rate);
+}
+
+void DeepFilterNet::run_model(std::span<const float> left_in,
+                              std::span<const float> right_in,
+                              std::span<float> left_out,
+                              std::span<float> right_out) {
+  if (use_dpdfnet) {
+    dpdfnet_l->n_samples = left_in.size();
+    dpdfnet_l->connect_data_ports(left_in, left_in, left_out, left_out);
+    dpdfnet_l->run();
+
+    if (mono_processing) {
+      std::ranges::copy(left_out, right_out.begin());
+    } else {
+      dpdfnet_r->n_samples = right_in.size();
+      dpdfnet_r->connect_data_ports(right_in, right_in, right_out, right_out);
+      dpdfnet_r->run();
+    }
+  } else {
+    ladspa_wrapper->n_samples = left_in.size();
+    ladspa_wrapper->connect_data_ports(left_in, right_in, left_out, right_out);
+    ladspa_wrapper->run();
+  }
+}
+
+void DeepFilterNet::resetHistory() {
+  // clear_data();
+
+  {
+    if (ladspa_wrapper == nullptr) {
+      return;
+    }
+
+    std::scoped_lock<std::mutex> lock(data_mutex);
+
+    if (ready) {
+      ready = false;
+
+      for (auto* wrapper : {ladspa_wrapper.get(), dpdfnet_l.get(), dpdfnet_r.get()}) {
+        if (wrapper->has_instance()) {
+          wrapper->destroy_instance();
+        }
+      }
+    }
+  }
+
+  setup();
+}

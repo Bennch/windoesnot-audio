@@ -1,0 +1,521 @@
+/**
+ * Copyright © 2025-2026 Wellington Wallace
+ *
+ * This file is part of Easy Effects.
+ *
+ * Easy Effects is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Easy Effects is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Easy Effects. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import ee.ui
+import org.kde.kirigami as Kirigami
+
+Kirigami.ApplicationWindow {
+    id: appWindow
+
+    required property string applicationName
+    required property string applicationId
+    required property bool canUseSysTray
+
+    readonly property real maxOverlayHeight: height - header.height - footer.height
+
+    // We need to set visible to false in order to fix an issue related to
+    // --hide-window option. See #4491.
+    visible: false
+    width: DbMain.width
+    height: DbMain.height
+    title: applicationName
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
+
+    property var pagesMap: {
+        0: {
+            page: Qt.resolvedUrl("./PageStreamsEffects.qml"),
+            pageType: 0,
+            streamDB: DbStreamOutputs,
+            pipelineInstance: StreamOutputEffects
+        },
+        1: {
+            page: Qt.resolvedUrl("./PageStreamsEffects.qml"),
+            pageType: 1,
+            streamDB: DbStreamInputs,
+            pipelineInstance: StreamInputEffects
+        },
+        2: {
+            page: Qt.resolvedUrl("./PipeWirePage.qml"),
+            pageType: 2,
+            streamDB: null,
+            pluginsDB: null,
+            pipelineInstance: null
+        }
+    }
+
+    property var trayIcon: null
+
+    onVisibleChanged: {
+        if (appWindow.visible) {
+            /**
+             * When the window is reopened, its state (maximized, minimized,
+             * fullscreen, etc.) is lost.
+             * This happens both after restarting the application and when
+             * switching its visibility through the tray.
+             * Until this issue is fixed with a proper Wayland protocol, we can
+             * adopt the approach used in qBittorrent: save the visibility
+             * property into the database when hiding the window and restore
+             * its value when the window is shown.
+             */
+
+            /**
+             * The idea was doing what is described above. But for some reason Qt sometimes shows a warning about
+             * visible conflicting with visibility. And in the worse cases the window may never be shown. It does not
+             * matter how many times we restart EE. So for now letś disable the visibility management.
+             */
+
+            // appWindow.visibility = DbMain.visibility;
+
+            DatabaseManager.enableAutosave(true);
+
+            openMappedPage(DbMain.visiblePage);
+        } else {
+            // DbMain.visibility = appWindow.visibility;
+
+            DatabaseManager.saveAll();
+
+            pageStack.clear();
+        }
+    }
+
+    onClosing: {
+        onCloseWindow();
+    }
+
+    Component.onCompleted: {
+        if (canUseSysTray) {
+            trayIcon = Qt.createComponent("TrayIcon.qml").createObject(appWindow, {
+                shortcuts: shortcutsSheet,
+                applicationName: appWindow.applicationName,
+                applicationId: appWindow.applicationId,
+                canUseSysTray: appWindow.canUseSysTray
+            });
+
+            if (trayIcon) {
+                trayIcon.setMainWindow(appWindow);
+            }
+        }
+    }
+
+    Component.onDestruction: {
+        onCloseWindow();
+    }
+
+    function onCloseWindow() {
+        // DbMain.visibility = appWindow.visibility;
+
+        DatabaseManager.saveAll();
+
+        DatabaseManager.enableAutosave(false);
+    }
+
+    function openMappedPage(index) {
+        const info = pagesMap[index];
+
+        if (!info)
+            return;
+
+        let args = {};
+
+        if (info.pageType !== 2) {
+            args.pageType = info.pageType;
+            args.streamDB = info.streamDB;
+
+            args.pluginsDB = index === 0 ? Qt.binding(function () {
+                // QMap used as property is viewed as a JS object and not a QObject. So binding needs Qt.binding
+                return DatabaseManager.soePluginsDB;
+            }) : Qt.binding(function () {
+                return DatabaseManager.siePluginsDB;
+            });
+
+            args.pipelineInstance = info.pipelineInstance;
+            args.visible = true;
+        }
+
+        if (pageStack.depth === 0)
+            pageStack.push(info.page, args);
+        else
+            pageStack.replace(info.page, args);
+
+        DbMain.visiblePage = index;
+    }
+
+    function showStatus(label, statusType = Kirigami.MessageType.Information, autohide = true) {
+        autoHideStatusTimer.stop();
+
+        statusMessage.type = statusType;
+        statusMessage.text = label;
+        statusMessage.visible = true;
+
+        if (autohide) {
+            autoHideStatusTimer.start();
+        }
+    }
+
+    Binding {
+        target: DbMain// qmllint disable
+        property: "width"
+        value: appWindow.width
+    }
+
+    Binding {
+        target: DbMain// qmllint disable
+        property: "height"
+        value: appWindow.height
+    }
+
+    Connections {
+        target: DbMain// qmllint disable
+
+        function onVisiblePageChanged() {
+            appWindow.openMappedPage(DbMain.visiblePage);
+        }
+    }
+
+    Connections {
+        target: PresetsManager
+
+        function onPresetLoadError(title, description) {
+            appWindow.showStatus(`${title}. ${description}.`, Kirigami.MessageType.Error, false);
+        }
+    }
+
+    Connections {
+        target: Autostart
+
+        function onError(description) {
+            appWindow.showStatus(`${description}`, Kirigami.MessageType.Error, false);
+        }
+    }
+
+    Timer {
+        id: autoHideStatusTimer
+        interval: DbMain.autoHideInlineMessageTimeout
+        onTriggered: {
+            statusMessage.visible = false;
+
+            autoHideStatusTimer.stop();
+        }
+    }
+
+    Shortcut {
+        sequences: ["F11"]
+        onActivated: {
+            if (appWindow.visibility !== Window.FullScreen)
+                appWindow.showFullScreen();
+            else
+                appWindow.showNormal();
+        }
+    }
+
+    Shortcut {
+        sequences: ["F1"]
+        onActivated: {
+            Qt.openUrlExternally("https://wwmm.github.io/easyeffects/");
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+B"]
+        onActivated: {
+            DbMain.bypass = !DbMain.bypass;
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+W"]
+        onActivated: appWindow.close()
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Q"]
+        onActivated: Qt.quit()
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Shift+I"]
+        onActivated: {
+            DbMain.processAllInputs = !DbMain.processAllInputs;
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Shift+O"]
+        onActivated: {
+            DbMain.processAllOutputs = !DbMain.processAllOutputs;
+        }
+    }
+
+    Kirigami.Action {
+        /**
+         * The usual way to declare the "shut down the service" Ctrl+Q shortcut
+         * with the Shortcut QML class does not work on Gnome since it closes
+         * only the visible window and does not quit the Easy Effects service.
+         * With a Kirigami.Action class instead we can implement a
+         * StandardKey.Quit action that catches the CTRL+Q event on Gnome, so
+         * we can terminate the service with the keyboard shortcut also there.
+         */
+        shortcut: StandardKey.Quit
+        onTriggered: {
+            Qt.quit();
+        }
+    }
+
+    Loader {
+        id: preferencesSheetLoader
+        active: false
+        asynchronous: true
+
+        sourceComponent: PreferencesSheet {
+            window: appWindow
+            canUseSysTray: appWindow.canUseSysTray
+        }
+
+        onStatusChanged: {
+            if (status === Loader.Ready)
+                item.open();
+        }
+    }
+
+    ShortcutsSheet {
+        id: shortcutsSheet
+    }
+
+    Kirigami.PromptDialog {
+        id: resetPromptDialog
+
+        title: i18n("Reset Settings?") // qmllint disable
+        subtitle: i18n("Are you sure you want to reset all Easy Effects settings?") // qmllint disable
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        onAccepted: DatabaseManager.resetAll()
+    }
+
+    header: Kirigami.AbstractApplicationHeader {
+
+        contentItem: RowLayout {
+            anchors {
+                left: parent.left
+                leftMargin: Kirigami.Units.smallSpacing
+                right: parent.right
+                rightMargin: Kirigami.Units.smallSpacing
+            }
+
+            Kirigami.ActionToolBar {
+                id: presetsToolBar
+
+                alignment: Qt.AlignLeft
+                overflowIconName: "overflow-menu-left"
+                actions: [
+                    Kirigami.Action {
+                        text: i18n("PipeWire") // qmllint disable
+                        icon.name: "draw-arrow-back-symbolic"
+                        visible: DbMain.visiblePage === 2
+                        onTriggered: {
+                            pageStack.currentItem.goBack();
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Effects") // qmllint disable
+                        tooltip: i18n("Turn effects on/off") // qmllint disable
+                        icon.name: "system-shutdown-symbolic"
+                        icon.color: checked === true ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                        displayHint: Kirigami.DisplayHint.KeepVisible
+                        checkable: true
+                        checked: !DbMain.bypass
+                        visible: DbMain.visiblePage !== 2
+                        onTriggered: {
+                            if (checked !== !DbMain.bypass) {
+                                DbMain.bypass = !checked;
+                            }
+
+                            checked ? appWindow.showStatus(i18n("Audio effects are enabled."), Kirigami.MessageType.Positive) : appWindow.showStatus(i18n("Audio effects are disabled.")); // qmllint disable
+                        }
+                    }
+                ]
+            }
+
+            RowLayout {
+                id: segmentedButton
+
+                readonly property bool hasEnoughWidth: appWindow.width >= Kirigami.Units.gridUnit * 40
+                readonly property int display: (!Kirigami.Settings.isMobile && hasEnoughWidth) ? Controls.ToolButton.TextBesideIcon : Controls.ToolButton.IconOnly
+
+                spacing: Kirigami.Units.smallSpacing
+
+                Layout.alignment: Qt.AlignHCenter
+
+                Controls.ButtonGroup {
+                    id: navButtonGroup
+                }
+
+                Controls.ToolButton {
+                    text: i18n("Output") // qmllint disable
+                    icon.name: "audio-speakers-symbolic"
+                    checkable: true
+                    checked: DbMain.visiblePage === 0 && DbStreamOutputs.visiblePage === 1
+                    display: segmentedButton.display
+                    visible: DbMain.visiblePage !== 2
+                    Kirigami.MnemonicData.controlType: Kirigami.MnemonicData.ActionElement
+                    onClicked: {
+                        DbMain.visiblePage = 0;
+                        DbStreamOutputs.visiblePage = 1;
+                    }
+
+                    Controls.ButtonGroup.group: navButtonGroup
+                }
+
+                Controls.ToolButton {
+                    text: i18n("Input") // qmllint disable
+                    icon.name: "audio-input-microphone-symbolic"
+                    checkable: true
+                    checked: DbMain.visiblePage === 1 && DbStreamInputs.visiblePage === 1
+                    display: segmentedButton.display
+                    visible: DbMain.visiblePage !== 2
+                    Kirigami.MnemonicData.controlType: Kirigami.MnemonicData.ActionElement
+                    onClicked: {
+                        DbMain.visiblePage = 1;
+                        DbStreamInputs.visiblePage = 1;
+                    }
+
+                    Controls.ButtonGroup.group: navButtonGroup
+                }
+
+                Controls.ToolButton {
+                    icon.name: "multimedia-player-symbolic"
+                    text: i18nc("Applications reproducing audio", "Players") // qmllint disable
+                    checkable: true
+                    checked: DbMain.visiblePage === 0 && DbStreamOutputs.visiblePage === 0
+                    display: segmentedButton.display
+                    visible: DbMain.visiblePage !== 2
+                    Kirigami.MnemonicData.controlType: Kirigami.MnemonicData.ActionElement
+                    onClicked: {
+                        DbMain.visiblePage = 0;
+                        DbStreamOutputs.visiblePage = 0;
+                    }
+
+                    Controls.ButtonGroup.group: navButtonGroup
+                }
+
+                Controls.ToolButton {
+                    icon.name: "media-record-symbolic"
+                    text: i18nc("Devices recording audio", "Recorders") // qmllint disable
+                    checkable: true
+                    checked: DbMain.visiblePage === 1 && DbStreamInputs.visiblePage === 0
+                    display: segmentedButton.display
+                    visible: DbMain.visiblePage !== 2
+                    Kirigami.MnemonicData.controlType: Kirigami.MnemonicData.ActionElement
+                    onClicked: {
+                        DbMain.visiblePage = 1;
+                        DbStreamInputs.visiblePage = 0;
+                    }
+
+                    Controls.ButtonGroup.group: navButtonGroup
+                }
+            }
+
+            Kirigami.ActionToolBar {
+                alignment: Qt.AlignRight
+                overflowIconName: "application-menu-symbolic"
+                actions: [
+                    Kirigami.Action {
+                        text: i18n("Preferences") // qmllint disable
+                        icon.name: "gtk-preferences-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            if (!preferencesSheetLoader.active) {
+                                preferencesSheetLoader.active = true;
+                            } else {
+                                preferencesSheetLoader.item.open();
+                            }
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Shortcuts") // qmllint disable
+                        icon.name: "input-keyboard-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            shortcutsSheet.open();
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("PipeWire") // qmllint disable
+                        icon.name: "network-server-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            DbMain.visiblePage = 2;
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18nc("Usage guide", "Manual") // qmllint disable
+                        icon.name: "help-contents-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            Qt.openUrlExternally("https://wwmm.github.io/easyeffects/");
+                        }
+                    },
+                    Kirigami.Action {
+                        separator: true
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                    },
+                    Kirigami.Action {
+                        text: i18n("Reset") // qmllint disable
+                        icon.name: "edit-reset-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            resetPromptDialog.open();
+                        }
+                    },
+                    Kirigami.Action {
+                        separator: true
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                    },
+                    Kirigami.Action {
+                        text: i18n("About Easy Effects") // qmllint disable
+                        icon.name: applicationId + "-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            appWindow.pageStack.pushDialogLayer(Qt.resolvedUrl("./AboutPage.qml"));
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Quit") // qmllint disable
+                        icon.name: "application-exit-symbolic"
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: {
+                            Qt.quit();
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+    footer: Kirigami.InlineMessage {
+        id: statusMessage
+
+        Layout.fillWidth: true
+        Layout.maximumWidth: parent.width
+        visible: false
+        showCloseButton: true
+    }
+}

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name="easyeffects/db/easyeffectsrc" />
+    <group name="StreamOutputs">
+        <entry name="plugins" type="StringList">
+            <label>List of Plugins in the Effects Pipeline</label>
+            <default></default>
+        </entry>
+        <entry name="useDefaultOutputDevice" type="Bool">
+            <label>Use the System Default Output Device</label>
+            <default>true</default>
+        </entry>
+        <entry name="outputDevice" type="String">
+            <label>Output Device</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="blocklist" type="StringList">
+            <label>List of Blocked Streams</label>
+            <default></default>
+        </entry>
+        <entry name="showBlocklistedApps" type="Bool">
+            <label>Show Blocked Streams in the Streams Tab</label>
+            <default>false</default>
+        </entry>
+        <entry name="blocklistUsesMediaName" type="Bool">
+            <label>When enabled the blocklist will also consider the combination of node name and media name when blocking.</label>
+            <default>false</default>
+        </entry>
+        <entry name="showPluginsList" type="Bool">
+            <label>Show the List of Plugins</label>
+            <default>true</default>
+        </entry>
+        <entry name="visiblePage" type="Enum">
+            <label>Saves the last viewed page.</label>
+            <choices>
+                <choice name="streamsPage">
+                    <label>Streams Page</label>
+                </choice>
+                <choice name="pluginsPage">
+                    <label>Plugins Page</label>
+                </choice>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="visiblePlugin" type="String">
+            <label>Visible Plugin</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="usedPresets" type="StringList">
+            <label>List of presets that have been used and their usage count</label>
+            <default></default>
+        </entry>
+        <entry name="mostUsedPresets" type="StringList">
+            <label>Ordered list of most used Presets.</label>
+            <default></default>
+        </entry>
+        <entry name="pluginsListWidth" type="Int">
+            <label>Width of the plugins list column.</label>
+            <default>0</default>
+        </entry>
+        <entry name="linkToVirtualSource" type="Bool">
+            <label>This links the output of the output effects pipeline to the input of our virtual source. This allows users to share their desktop audio (that is processed by EasyEffects) to people listening to what comes from EasyEffects virtual source.</label>
+            <default>false</default>
+        </entry>
+    </group>
+</kcfg>

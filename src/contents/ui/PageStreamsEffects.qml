@@ -1,0 +1,948 @@
+/**
+ * Copyright © 2025-2026 Wellington Wallace
+ *
+ * This file is part of Easy Effects.
+ *
+ * Easy Effects is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Easy Effects is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Easy Effects. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import ee.ui
+import org.kde.kirigami as Kirigami
+
+Kirigami.Page {
+    id: pageStreamsEffects
+
+    required property int pageType // 0 for output and 1 for input
+    required property var streamDB
+    required property var pluginsDB
+    required property EffectsBase pipelineInstance
+    property string logTag: "PageStreamsEffects"
+    property int minLeftLevel: -99
+    property int minRightLevel: -99
+
+    padding: 0
+
+    Component.onCompleted: {
+        updateStackPages();
+    }
+
+    function updateStackPages() {
+        switch (streamDB.visiblePage) {
+        case 0:
+            stackPages.replace(pageStreams);
+            break;
+        case 1:
+            stackPages.replace(pagePlugins);
+            break;
+        default:
+        }
+    }
+
+    Connections {
+        function onVisiblePageChanged() {
+            pageStreamsEffects.updateStackPages();
+        }
+
+        target: pageStreamsEffects.streamDB
+    }
+
+    ListModel {
+        id: pluginsListModel
+    }
+
+    Loader {
+        id: menuAddPluginsLoader
+        active: false
+        asynchronous: true
+
+        sourceComponent: MenuAddPlugins {
+            parent: pageStreamsEffects.Controls.Overlay.overlay
+            streamDB: pageStreamsEffects.streamDB
+        }
+
+        onStatusChanged: {
+            if (status === Loader.Ready)
+                item.open();
+        }
+    }
+
+    Loader {
+        id: presetsDialogLoader
+        active: false
+        asynchronous: true
+
+        sourceComponent: PresetsDialog {}
+
+        onStatusChanged: {
+            if (status === Loader.Ready)
+                item.open();
+        }
+    }
+
+    Loader {
+        id: blocklistDialogLoader
+        active: false
+        asynchronous: true
+
+        sourceComponent: BlocklistDialog {
+            streamDB: pageStreamsEffects.streamDB
+        }
+
+        onStatusChanged: {
+            if (status === Loader.Ready)
+                item.open();
+        }
+    }
+
+    Component {
+        id: pageStreams
+
+        Kirigami.ScrollablePage {
+            Kirigami.CardsListView {
+                id: streamsListView
+
+                clip: true
+                reuseItems: true
+                model: pageStreamsEffects.pageType === 0 ? ModelNodes.outputStreams : ModelNodes.inputStreams
+
+                Kirigami.PlaceholderMessage {
+                    anchors.centerIn: parent
+                    width: parent.width - (Kirigami.Units.largeSpacing * 4)
+                    visible: streamsListView.count === 0
+                    text: i18n("Empty List") // qmllint disable
+                    explanation: i18n("No audio application available") // qmllint disable
+                    icon.name: "folder-music-symbolic"
+                }
+
+                delegate: DelegateStreamsList {}
+            }
+        }
+    }
+
+    Component {
+        id: pagePluginsEmptyListMessage
+
+        Kirigami.ScrollablePage {
+            Kirigami.PlaceholderMessage {
+                anchors.centerIn: parent
+                text: i18n("No Effects") // qmllint disable
+                explanation: i18n("Audio stream not modified") // qmllint disable
+                icon.name: "folder-music-symbolic"
+            }
+        }
+    }
+
+    Component {
+        id: pagePlugins
+
+        GridLayout {
+            id: pagePluginsGrid
+
+            function populatePluginsListModel(plugins: list<string>) {
+                let baseNames = PluginsNameModel.getBaseNames();
+                pluginsListModel.clear();
+
+                for (let n = 0; n < plugins.length; n++) {
+                    for (let k = 0; k < baseNames.length; k++) {
+                        if (plugins[n].startsWith(baseNames[k])) {
+                            pluginsListModel.append({
+                                "name": plugins[n],
+                                "baseName": baseNames[k],
+                                "translatedName": PluginsNameModel.translate(baseNames[k]),
+                                "pluginDB": pageStreamsEffects.pluginsDB[plugins[n]]
+                            });
+                            break;
+                        }
+                    }
+                }
+            }
+
+            function createPluginStack(name: string, baseName: string, pluginDB: QtObject) {
+                while (pluginsStack.depth > 1)
+                    pluginsStack.pop();
+
+                const pluginMap = {
+                    [PluginsBaseName.autogain]: Qt.resolvedUrl("Autogain.qml"),
+                    [PluginsBaseName.autotune]: Qt.resolvedUrl("Autotune.qml"),
+                    [PluginsBaseName.harmonizer]: Qt.resolvedUrl("Harmonizer.qml"),
+                    [PluginsBaseName.bassEnhancer]: Qt.resolvedUrl("BassEnhancer.qml"),
+                    [PluginsBaseName.bassLoudness]: Qt.resolvedUrl("BassLoudness.qml"),
+                    [PluginsBaseName.compressor]: Qt.resolvedUrl("Compressor.qml"),
+                    [PluginsBaseName.convolver]: Qt.resolvedUrl("Convolver.qml"),
+                    [PluginsBaseName.crossfeed]: Qt.resolvedUrl("Crossfeed.qml"),
+                    [PluginsBaseName.crusher]: Qt.resolvedUrl("Crusher.qml"),
+                    [PluginsBaseName.crystalizer]: Qt.resolvedUrl("Crystalizer.qml"),
+                    [PluginsBaseName.delay]: Qt.resolvedUrl("Delay.qml"),
+                    [PluginsBaseName.deepfilternet]: Qt.resolvedUrl("DeepFilterNet.qml"),
+                    [PluginsBaseName.deesser]: Qt.resolvedUrl("Deesser.qml"),
+                    [PluginsBaseName.equalizer]: Qt.resolvedUrl("Equalizer.qml"),
+                    [PluginsBaseName.midsideEqualizer]: Qt.resolvedUrl("MidSideEqualizer.qml"),
+                    [PluginsBaseName.exciter]: Qt.resolvedUrl("Exciter.qml"),
+                    [PluginsBaseName.echoCanceller]: Qt.resolvedUrl("EchoCanceller.qml"),
+                    [PluginsBaseName.expander]: Qt.resolvedUrl("Expander.qml"),
+                    [PluginsBaseName.filter]: Qt.resolvedUrl("Filter.qml"),
+                    [PluginsBaseName.gate]: Qt.resolvedUrl("Gate.qml"),
+                    [PluginsBaseName.levelMeter]: Qt.resolvedUrl("LevelMeter.qml"),
+                    [PluginsBaseName.crosstalkCanceller]: Qt.resolvedUrl("CrosstalkCanceller.qml"),
+                    [PluginsBaseName.limiter]: Qt.resolvedUrl("Limiter.qml"),
+                    [PluginsBaseName.loudness]: Qt.resolvedUrl("Loudness.qml"),
+                    [PluginsBaseName.maximizer]: Qt.resolvedUrl("Maximizer.qml"),
+                    [PluginsBaseName.multibandCompressor]: Qt.resolvedUrl("MultibandCompressor.qml"),
+                    [PluginsBaseName.multibandGate]: Qt.resolvedUrl("MultibandGate.qml"),
+                    [PluginsBaseName.pitch]: Qt.resolvedUrl("Pitch.qml"),
+                    [PluginsBaseName.reverb]: Qt.resolvedUrl("Reverb.qml"),
+                    [PluginsBaseName.rnnoise]: Qt.resolvedUrl("RNNoise.qml"),
+                    [PluginsBaseName.speex]: Qt.resolvedUrl("Speex.qml"),
+                    [PluginsBaseName.stereoTools]: Qt.resolvedUrl("StereoTools.qml"),
+                    [PluginsBaseName.voiceSuppressor]: Qt.resolvedUrl("VoiceSuppressor.qml")
+                };
+
+                const packageMap = {
+                    [PluginsBaseName.autotune]: PluginsPackage.x42,
+                    [PluginsBaseName.harmonizer]: PluginsPackage.rakarrack,
+                    [PluginsBaseName.bassEnhancer]: PluginsPackage.calf,
+                    [PluginsBaseName.bassLoudness]: PluginsPackage.mda,
+                    [PluginsBaseName.compressor]: PluginsPackage.lsp,
+                    [PluginsBaseName.crossfeed]: PluginsPackage.bs2b,
+                    [PluginsBaseName.crusher]: PluginsPackage.calf,
+                    [PluginsBaseName.crystalizer]: PluginsPackage.zita,
+                    [PluginsBaseName.delay]: PluginsPackage.lsp,
+                    [PluginsBaseName.deepfilternet]: "DeepFilterNet / DPDFNet",
+                    [PluginsBaseName.deesser]: PluginsPackage.calf,
+                    [PluginsBaseName.equalizer]: PluginsPackage.lsp,
+                    [PluginsBaseName.midsideEqualizer]: PluginsPackage.lsp,
+                    [PluginsBaseName.exciter]: PluginsPackage.calf,
+                    [PluginsBaseName.expander]: PluginsPackage.lsp,
+                    [PluginsBaseName.filter]: PluginsPackage.lsp,
+                    [PluginsBaseName.gate]: PluginsPackage.lsp,
+                    [PluginsBaseName.crosstalkCanceller]: PluginsPackage.ee,
+                    [PluginsBaseName.limiter]: PluginsPackage.lsp,
+                    [PluginsBaseName.loudness]: PluginsPackage.lsp,
+                    [PluginsBaseName.maximizer]: PluginsPackage.zam,
+                    [PluginsBaseName.multibandCompressor]: PluginsPackage.lsp,
+                    [PluginsBaseName.multibandGate]: PluginsPackage.lsp,
+                    [PluginsBaseName.reverb]: PluginsPackage.calf,
+                    [PluginsBaseName.rnnoise]: PluginsPackage.rnnoise,
+                    [PluginsBaseName.stereoTools]: PluginsPackage.calf,
+                    [PluginsBaseName.voiceSuppressor]: PluginsPackage.ee
+                };
+
+                const componentUrl = pluginMap[baseName];
+
+                if (!componentUrl) {
+                    console.log(`${pageStreamsEffects.logTag} invalid plugin name: ${baseName}`);
+
+                    return;
+                }
+
+                const pluginPackage = packageMap[baseName];
+
+                const pluginBackend = pageStreamsEffects.pipelineInstance.getPluginInstance(name);
+
+                if (pluginBackend.packageInstalled === false) {
+                    pluginsStack.push(Qt.resolvedUrl("PluginNotAvailable.qml"), {
+                        packageName: packageMap[baseName],
+                        translatedName: PluginsNameModel.translate(baseName)
+                    });
+
+                    return;
+                }
+
+                if (baseName === PluginsBaseName.equalizer) {
+                    pluginsStack.push(componentUrl, {
+                        name: name,
+                        pluginDB: pluginDB,
+                        pipelineInstance: pageStreamsEffects.pipelineInstance,
+                        leftDB: pageStreamsEffects.pluginsDB[`${name}#left`],
+                        rightDB: pageStreamsEffects.pluginsDB[`${name}#right`]
+                    });
+                } else if (baseName === PluginsBaseName.midsideEqualizer) {
+                    pluginsStack.push(componentUrl, {
+                        name: name,
+                        pluginDB: pluginDB,
+                        pipelineInstance: pageStreamsEffects.pipelineInstance,
+                        midDB: pageStreamsEffects.pluginsDB[`${name}#mid`],
+                        sideDB: pageStreamsEffects.pluginsDB[`${name}#side`]
+                    });
+                } else {
+                    pluginsStack.push(componentUrl, {
+                        name: name,
+                        pluginDB: pluginDB,
+                        pipelineInstance: pageStreamsEffects.pipelineInstance
+                    });
+                }
+            }
+
+            function populatePluginsStack() {
+                if (pageStreamsEffects.streamDB.plugins.length < 1) {
+                    return;
+                }
+
+                if (!pageStreamsEffects.streamDB.plugins.includes(pageStreamsEffects.streamDB.visiblePlugin))
+                    pageStreamsEffects.streamDB.visiblePlugin = pageStreamsEffects.streamDB.plugins[0];
+
+                pluginsListView.currentIndex = pageStreamsEffects.streamDB.plugins.findIndex(v => {
+                    return v === pageStreamsEffects.streamDB.visiblePlugin;
+                });
+
+                const baseNames = PluginsNameModel.getBaseNames();
+
+                for (let k = 0; k < baseNames.length; k++) {
+                    if (pageStreamsEffects.streamDB.visiblePlugin.startsWith(baseNames[k])) {
+                        createPluginStack(pageStreamsEffects.streamDB.visiblePlugin, baseNames[k], pageStreamsEffects.pluginsDB[pageStreamsEffects.streamDB.visiblePlugin]);
+                        break;
+                    }
+                }
+            }
+
+            Component.onCompleted: {
+                pluginsListView.currentIndex = -1;
+
+                populatePluginsListModel(pageStreamsEffects.streamDB.plugins);
+
+                populatePluginsStack();
+            }
+            Component.onDestruction: {
+                frameAnimation.stop();
+            }
+
+            Layout.fillHeight: true
+            Layout.fillWidth: true
+            columns: 3
+            rows: 1
+            columnSpacing: 0
+
+            FrameAnimation {
+                id: frameAnimation
+
+                property var timeDiff: 0
+                readonly property real invFps: 1.0 / DbMain.levelMetersFpsCap
+
+                running: pageStreamsEffects.pageType !== 2 && appWindow.visible && pipelineInstance.filtersLinked // qmllint disable
+
+                onTriggered: {
+                    if (frameAnimation.timeDiff < invFps) {
+                        frameAnimation.timeDiff += frameAnimation.smoothFrameTime;
+
+                        return;
+                    }
+
+                    frameAnimation.timeDiff = 0;
+
+                    if (pluginsStack.depth > 1 && pluginsStack.currentItem?.pluginBackend !== undefined)
+                        pluginsStack.currentItem.updateMeters();
+                }
+            }
+
+            Connections {
+                function onPipelineChanged() {
+                    const newList = pageStreamsEffects.streamDB.plugins.slice();
+
+                    pagePluginsGrid.populatePluginsListModel(newList);
+
+                    if (newList.length === 0) {
+                        pageStreamsEffects.streamDB.visiblePlugin = "";
+
+                        while (pluginsStack.depth > 1)
+                            pluginsStack.pop();
+                    }
+
+                    if (newList.length === 1 && pluginsListView.currentIndex === -1)
+                        pluginsListView.currentIndex = 0;
+
+                    pagePluginsGrid.populatePluginsStack();
+                }
+
+                function onFiltersLinkedChanged() {
+                    if (pipelineInstance.filtersLinked === false) {
+                        EeMetersReset.reset();
+                    }
+                }
+
+                target: pageStreamsEffects.pipelineInstance
+            }
+
+            Connections {
+                function onDataChanged() {
+                    let newList = [];
+
+                    for (let n = 0; n < pluginsListModel.count; n++) {
+                        newList.push(pluginsListModel.get(n).name);
+                    }
+
+                    if (!Common.equalStringArrays(pageStreamsEffects.streamDB.plugins, newList))
+                        pageStreamsEffects.streamDB.plugins = newList;
+
+                    if (newList.length === 0) {
+                        pageStreamsEffects.streamDB.visiblePlugin = "";
+
+                        while (pluginsStack.depth > 1)
+                            pluginsStack.pop();
+                    }
+                }
+
+                target: pluginsListModel
+            }
+
+            ColumnLayout {
+                id: pluginsListLayout
+
+                spacing: 0
+                Layout.maximumWidth: DbMain.collapsePluginsList ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 32
+                Layout.minimumWidth: DbMain.collapsePluginsList ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 16
+                Layout.preferredWidth: Common.clamp(streamDB.pluginsListWidth, Layout.minimumWidth, Layout.maximumWidth)
+
+                GridLayout {
+                    columns: DbMain.collapsePluginsList === true ? 1 : 2
+                    Layout.fillWidth: true
+                    Layout.topMargin: Kirigami.Units.mediumSpacing
+                    Layout.bottomMargin: Kirigami.Units.mediumSpacing
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+                    Layout.alignment: Qt.AlignCenter
+
+                    Controls.Button {
+                        text: i18n("Add effect") // qmllint disable
+                        display: DbMain.collapsePluginsList === true ? Controls.Button.IconOnly : Controls.Button.TextBesideIcon
+                        icon.name: "list-add"
+                        onClicked: {
+                            if (!menuAddPluginsLoader.active) {
+                                menuAddPluginsLoader.active = true;
+                            } else {
+                                menuAddPluginsLoader.item.open();
+                            }
+                        }
+                        Layout.fillWidth: DbMain.collapsePluginsList === true
+                    }
+
+                    Controls.Button {
+                        text: i18n("Close") // qmllint disable
+                        display: DbMain.collapsePluginsList === true ? Controls.Button.IconOnly : Controls.Button.TextBesideIcon
+                        icon.name: DbMain.collapsePluginsList === true ? "sidebar-collapse-right-symbolic" : "sidebar-collapse-symbolic"
+                        Layout.fillWidth: DbMain.collapsePluginsList === true
+                        Controls.ToolTip.text: DbMain.collapsePluginsList === true ? i18n("Expand the list of effects pipeline") : i18n("Reduce the list of effects pipeline") // qmllint disable
+                        Controls.ToolTip.visible: hovered
+                        onClicked: {
+                            DbMain.collapsePluginsList = !DbMain.collapsePluginsList;
+                        }
+                    }
+                }
+
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+                }
+
+                ListView {
+                    id: pluginsListView
+
+                    Layout.fillHeight: true
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing * 2
+
+                    clip: true
+                    reuseItems: true
+                    model: pluginsListModel
+
+                    delegate: DelegatePluginsList {
+                        listModel: pluginsListModel
+                        listView: pluginsListView
+                        streamDB: pageStreamsEffects.streamDB
+                        onSelectedChanged: name => {
+                            if (pageStreamsEffects.streamDB.visiblePlugin !== name) {
+                                pageStreamsEffects.streamDB.visiblePlugin = name;
+
+                                let baseName = pluginsListModel.get(pluginsListView.currentIndex).baseName;
+
+                                pagePluginsGrid.createPluginStack(name, baseName, pageStreamsEffects.pluginsDB[name]);
+                            }
+                        }
+                    }
+
+                    moveDisplaced: Transition {
+                        YAnimator {
+                            duration: Kirigami.Units.longDuration
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+
+                    header: EeListSectionHeader {
+                        width: ListView.view.width
+                        visible: pluginsListView.count !== 0
+
+                        icon.name: pageStreamsEffects.pageType === 0 ? "source-playlist-symbolic" : "audio-input-microphone-symbolic"
+                        compact: DbMain.collapsePluginsList
+                        text: pageStreamsEffects.pageType === 0 ? i18nc("Applications reproducing audio", "Players") : i18n("Input device") // qmllint disable
+                    }
+
+                    footer: EeListSectionHeader {
+                        width: ListView.view.width
+                        visible: pluginsListView.count !== 0
+
+                        icon.name: pageStreamsEffects.pageType === 0 ? "audio-speakers-symbolic" : "source-playlist-symbolic"
+                        compact: DbMain.collapsePluginsList
+                        text: pageStreamsEffects.pageType === 0 ? i18n("Output device") : i18nc("Devices recording audio", "Recorders") // qmllint disable
+                    }
+                }
+            }
+
+            Kirigami.Separator {
+                id: pluginsSeparator
+
+                Layout.fillHeight: true
+                Layout.fillWidth: false
+                Layout.preferredWidth: separatorMouseArea.containsMouse ? Kirigami.Units.largeSpacing : implicitWidth
+
+                MouseArea {
+                    id: separatorMouseArea
+
+                    property bool dragging: false
+                    property real dragStartX: 0
+                    property real initialListWidth: 0
+
+                    anchors.fill: parent
+                    enabled: !DbMain.collapsePluginsList
+                    hoverEnabled: true
+                    cursorShape: !DbMain.collapsePluginsList ? Qt.SplitHCursor : Qt.ArrowCursor
+                    drag.axis: Drag.XAxis
+                    drag.minimumX: pluginsListLayout.Layout.minimumWidth
+                    drag.maximumX: pluginsListLayout.Layout.maximumWidth
+
+                    onPressed: mouse => {
+                        dragging = true;
+                        dragStartX = mouse.x;
+                        initialListWidth = pluginsListLayout.width;
+                    }
+
+                    onPositionChanged: mouse => {
+                        if (dragging && mouse.buttons & Qt.LeftButton) {
+                            const deltaX = mouse.x - dragStartX;
+                            const newWidth = initialListWidth + deltaX;
+
+                            pluginsListLayout.Layout.preferredWidth = newWidth;
+                        }
+                    }
+
+                    onReleased: {
+                        dragging = false;
+
+                        streamDB.pluginsListWidth = pluginsListLayout.width;
+                    }
+                }
+            }
+
+            Controls.StackView {
+                id: pluginsStack
+
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                Layout.horizontalStretchFactor: 3
+                visible: pageStreamsEffects.streamDB.visiblePage === 1
+
+                initialItem: pagePluginsEmptyListMessage
+
+                Binding {
+                    target: pluginsStack.currentItem?.pluginBackend ?? null
+                    property: "updateLevelMeters"
+                    value: pluginsStack.visible
+                    when: pluginsStack.currentItem?.pluginBackend !== undefined && pluginsStack.visible !== undefined
+                }
+            }
+        }
+    }
+
+    Controls.StackView {
+        id: stackPages
+
+        anchors.fill: parent
+    }
+
+    header: ColumnLayout {
+        spacing: 0
+
+        EeChart {
+            id: spectrumChart
+
+            Layout.fillWidth: true
+            implicitHeight: DbSpectrum.height
+            seriesType: DbSpectrum.spectrumShape
+            colorScheme: DbGraph.colorScheme
+            colorTheme: DbGraph.colorTheme
+            xMin: DbSpectrum.minimumFrequency
+            xMax: DbSpectrum.maximumFrequency
+            yMin: 0
+            yMax: DbSpectrum.maximumLevel - DbSpectrum.minimumLevel
+            yDataOffset: -DbSpectrum.minimumLevel
+            logarithmicHorizontalAxis: DbSpectrum.logarithmicHorizontalAxis
+            dynamicYScale: false
+            xUnit: Units.hz
+            yUnit: Units.dB
+            visible: DbSpectrum.state
+
+            Component.onDestruction: {
+                headerFrameAnimation.stop();
+            }
+
+            FrameAnimation {
+                id: headerFrameAnimation
+
+                property var timeDiff: 0
+                readonly property real invFps: 1.0 / DbSpectrum.spectrumFpsCap
+
+                running: DbSpectrum.state && appWindow.visible && pipelineInstance.filtersLinked // qmllint disable
+
+                onRunningChanged: {
+                    pageStreamsEffects.pipelineInstance.setSpectrumBypass(!running);
+                }
+
+                onTriggered: {
+                    headerFrameAnimation.timeDiff += headerFrameAnimation.frameTime;
+
+                    // Rounding to the nearest frame keeps a cap equal to the refresh rate from skipping frames
+                    if (headerFrameAnimation.timeDiff < invFps - 0.5 * headerFrameAnimation.frameTime) {
+                        return;
+                    }
+
+                    headerFrameAnimation.timeDiff = Math.min(headerFrameAnimation.timeDiff - invFps, invFps);
+
+                    pageStreamsEffects.pipelineInstance.requestSpectrumData();
+                }
+            }
+
+            Connections {
+                function onNewSpectrumData(newData: list<point>, rangeMin: real, rangeMax: real) {
+                    spectrumChart.yMin = rangeMin + spectrumChart.yDataOffset;
+                    spectrumChart.yMax = rangeMax + spectrumChart.yDataOffset;
+                    spectrumChart.updateData(newData);
+                }
+
+                target: pageStreamsEffects.pipelineInstance
+            }
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+            visible: true
+        }
+    }
+
+    footer: Kirigami.AbstractApplicationHeader {
+        position: Controls.ToolBar.Footer
+
+        contentItem: RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            anchors {
+                left: parent.left
+                leftMargin: Kirigami.Units.smallSpacing
+                right: parent.right
+                rightMargin: Kirigami.Units.smallSpacing
+                bottom: parent.bottom
+            }
+
+            Kirigami.ActionToolBar {
+                alignment: Qt.AlignLeft
+                position: Controls.ToolBar.Footer
+                overflowIconName: "im-ban-kick-user-symbolic"
+                actions: [
+                    Kirigami.Action {
+                        text: i18n("Presets") // qmllint disable
+                        icon.name: "user-bookmarks-symbolic"
+                        displayHint: Kirigami.DisplayHint.KeepVisible
+                        visible: DbMain.visiblePage !== 2
+                        onTriggered: {
+                            if (!presetsDialogLoader.active) {
+                                presetsDialogLoader.active = true;
+                            } else {
+                                presetsDialogLoader.item.open();
+                            }
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Excluded apps") // qmllint disable
+                        icon.name: "im-ban-kick-user-symbolic"
+                        displayHint: Kirigami.DisplayHint.KeepVisible
+                        visible: pageStreamsEffects.streamDB.visiblePage === 0
+                        onTriggered: {
+                            if (!blocklistDialogLoader.active) {
+                                blocklistDialogLoader.active = true;
+                            } else {
+                                blocklistDialogLoader.item.open();
+                            }
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Input monitoring") // qmllint disable
+                        icon.name: "audio-input-microphone-symbolic"
+                        displayHint: Kirigami.DisplayHint.KeepVisible
+                        visible: pageStreamsEffects.pageType === 1
+                        displayComponent: RowLayout {
+                            id: inputMonitoringRowLayout
+
+                            function prepareVolumeValue(normalizedValue) {
+                                const v = DbMain.useCubicVolumes === false ? normalizedValue : Math.cbrt(normalizedValue);
+                                return v * 100;
+                            }
+
+                            spacing: -1
+
+                            Controls.ToolButton {
+                                id: inputMonitoringToolButton
+
+                                icon.name: "audio-input-microphone-symbolic"
+                                text: i18n("Input monitoring") // qmllint disable
+                                checkable: true
+                                checked: DbStreamInputs.listenToMic
+                                onClicked: {
+                                    if (checked !== DbStreamInputs.listenToMic) {
+                                        DbStreamInputs.listenToMic = checked;
+                                    }
+                                }
+
+                                Controls.ToolTip.text: i18n("Toggle input monitoring") // qmllint disable
+                                Controls.ToolTip.visible: hovered
+                            }
+
+                            Controls.ToolButton {
+                                id: inputMonitoringArrowButton
+
+                                display: Controls.ToolButton.IconOnly
+                                icon.name: checked ? "arrow-down-symbolic" : "arrow-up-symbolic"
+                                flat: true
+                                checkable: true
+                                checked: false
+                                onCheckedChanged: {
+                                    if (checked) {
+                                        volumePopup.open();
+                                    } else {
+                                        volumePopup.close();
+                                    }
+                                }
+
+                                Controls.ToolTip.text: i18n("Set input monitoring volume") // qmllint disable
+                                Controls.ToolTip.visible: hovered
+                            }
+
+                            Controls.Popup {
+                                id: volumePopup
+
+                                parent: inputMonitoringRowLayout
+                                leftMargin: Math.round((parent.width - width) / 2)
+                                bottomMargin: parent ? footer.height + Kirigami.Units.smallSpacing : 0
+                                padding: Kirigami.Units.gridUnit
+                                closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnReleaseOutside
+                                onClosed: inputMonitoringArrowButton.checked = false
+
+                                ColumnLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+
+                                    RowLayout {
+                                        Controls.Label {
+                                            text: i18n("Monitoring volume") // qmllint disable
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Controls.Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: `${Math.round(volumeSlider.value)} ${Units.percent}`
+                                        }
+                                    }
+
+                                    Controls.Slider {
+                                        id: volumeSlider
+
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: Kirigami.Units.gridUnit * 12
+                                        orientation: Qt.Horizontal
+                                        value: inputMonitoringRowLayout.prepareVolumeValue(DbStreamInputs.listenToMicVolume)
+                                        to: 200
+                                        stepSize: 1
+                                        wheelEnabled: false
+                                        onMoved: {
+                                            let v = value / 100;
+                                            v = DbMain.useCubicVolumes === false ? v : v * v * v;
+                                            if (v !== DbStreamInputs.listenToMicVolume) {
+                                                DbStreamInputs.listenToMicVolume = v;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Share audio") // qmllint disable
+                        tooltip: i18n("Send the processed desktop audio to the virtual source") // qmllint disable
+                        icon.name: "emblem-shared-symbolic"
+                        displayHint: Kirigami.DisplayHint.KeepVisible
+                        visible: pageStreamsEffects.pageType === 0
+                        checkable: true
+                        checked: DbStreamOutputs.linkToVirtualSource
+                        onTriggered: {
+                            if (checked !== DbStreamOutputs.linkToVirtualSource) {
+                                DbStreamOutputs.linkToVirtualSource = checked;
+                            }
+                        }
+                    }
+                ]
+            }
+
+            Kirigami.ActionToolBar {
+                alignment: Qt.AlignRight
+                position: Controls.ToolBar.Footer
+                overflowIconName: "info-symbolic"
+                actions: [
+                    Kirigami.Action {
+                        id: actionRateValue
+
+                        // Sample rate
+
+                        displayComponent: Controls.Label {
+                            text: actionRateValue.text
+                            textFormat: Text.RichText
+                        }
+                    },
+                    Kirigami.Action {
+                        id: actionLatencyValue
+
+                        // Latency
+
+                        displayComponent: Controls.Label {
+                            text: actionLatencyValue.text
+                            textFormat: Text.RichText
+                        }
+                    },
+                    Kirigami.Action {
+                        id: actionLevelValue
+
+                        // Global Level Meter
+
+                        displayComponent: Controls.Label {
+                            text: actionLevelValue.text
+                            textFormat: Text.RichText
+                            wrapMode: Text.Wrap
+                        }
+                    },
+                    Kirigami.Action {
+                        id: actionLevelSaturation
+
+                        // Reserve the space for the warning icon.
+                        // This is to stop the rest of the action bar on the right side from moving
+                        // crazy when the icon enables or disables.
+                        property bool active: false
+
+                        displayComponent: Controls.ToolButton {
+                            icon.name: "dialog-warning-symbolic"
+
+                            opacity: actionLevelSaturation.active ? 1.0 : 0.0
+                            enabled: true
+                        }
+                    }
+                ]
+
+                Component.onDestruction: {
+                    pageStreamsEffects.pipelineInstance.setUpdateLevelMeters(false);
+
+                    footerFrameAnimation.stop();
+                }
+
+                Timer {
+                    id: sampleTimer
+
+                    property real leftValue: 0
+                    property real rightValue: 0
+
+                    interval: DbMain.levelMetersLabelTimer
+                    repeat: true
+                    running: footerFrameAnimation.running
+
+                    onTriggered: {
+                        leftValue = footerFrameAnimation.leftValue;
+                        rightValue = footerFrameAnimation.rightValue;
+                    }
+                }
+
+                FrameAnimation {
+                    id: footerFrameAnimation
+
+                    property real timeDiff: 0
+                    property real leftValue: 0
+                    property real rightValue: 0
+                    readonly property real invFps: 1.0 / DbMain.levelMetersFpsCap
+
+                    running: pageStreamsEffects.pageType !== 2 && appWindow.visible && pipelineInstance.filtersLinked // qmllint disable
+
+                    onRunningChanged: {
+                        pageStreamsEffects.pipelineInstance.setUpdateLevelMeters(running);
+                    }
+
+                    onTriggered: {
+                        if (footerFrameAnimation.timeDiff < invFps) {
+                            footerFrameAnimation.timeDiff += footerFrameAnimation.smoothFrameTime;
+
+                            return;
+                        }
+
+                        footerFrameAnimation.timeDiff = 0;
+
+                        leftValue = Number(pageStreamsEffects.pipelineInstance.getOutputLevelLeft());
+                        rightValue = Number(pageStreamsEffects.pipelineInstance.getOutputLevelRight());
+
+                        if (leftValue <= sampleTimer.leftValue || rightValue <= sampleTimer.rightValue) {
+                            return;
+                        }
+
+                        let left = leftValue > sampleTimer.leftValue ? leftValue : sampleTimer.leftValue;
+                        let right = rightValue > sampleTimer.rightValue ? rightValue : sampleTimer.rightValue;
+
+                        if (Number.isNaN(left) || left < pageStreamsEffects.minLeftLevel)
+                            left = pageStreamsEffects.minLeftLevel;
+
+                        if (Number.isNaN(right) || right < pageStreamsEffects.minRightLevel)
+                            right = pageStreamsEffects.minRightLevel;
+
+                        actionLevelSaturation.active = (left > 0 || right > 0);
+
+                        const localeLeft = left.toLocaleString(Qt.locale(), 'f', 0).padStart(3, ' ');
+                        const localeRight = right.toLocaleString(Qt.locale(), 'f', 0).padStart(3, ' ');
+
+                        // Since we found the standard bold too heavy for the
+                        // bottom bar, we used the font-weight style.
+                        const cssFontWeight = `style="font-weight:600"`;
+
+                        const styledLocaleLeft = left > -10 ? `<span ${cssFontWeight}>${localeLeft}</span>` : localeLeft;
+                        const styledLocaleRight = right > -10 ? `<span ${cssFontWeight}>${localeRight}</span>` : localeRight;
+
+                        const pipelineLatency = Number(pageStreamsEffects.pipelineInstance.getPipeLineLatency());
+                        const latency = pipelineLatency.toLocaleString(Qt.locale(), 'f', 1);
+                        const styledLatency = pipelineLatency > 0 ? `<span ${cssFontWeight}>${latency}</span>` : latency;
+
+                        const rate = Number(pageStreamsEffects.pipelineInstance.getPipeLineRate()).toLocaleString(Qt.locale(), 'f', 1);
+
+                        const cssFontColor = `style="color:${Kirigami.Theme.textColor}"`;
+
+                        actionRateValue.text = `<pre ${cssFontColor}> <span ${cssFontWeight}>${rate}</span> ${Units.kHz} </pre>`;
+                        actionLatencyValue.text = `<pre ${cssFontColor}> ${styledLatency} ${Units.ms} </pre>`;
+                        actionLevelValue.text = `<pre ${cssFontColor}> ${styledLocaleLeft} ${styledLocaleRight} ${Units.dB}</pre>`;
+                    }
+                }
+            }
+        }
+    }
+}

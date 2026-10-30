@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name="easyeffects/db/easyeffectsrc" />
+    <group name="Window">
+        <entry name="width" type="Int">
+            <label>Width of the main window.</label>
+            <default>800</default>
+        </entry>
+        <entry name="height" type="Int">
+            <label>Height of the main window.</label>
+            <default>600</default>
+        </entry>
+        <entry name="visibility" type="Int">
+            <label>Visibility of the main window.</label>
+            <default>1</default>
+        </entry>
+        <entry name="enableServiceMode" type="Bool">
+            <label>Enable Service Mode</label>
+            <default>true</default>
+        </entry>
+        <entry name="showTrayIcon" type="Bool">
+            <label>Show the Tray Icon</label>
+            <default>true</default>
+        </entry>
+        <entry name="autostartOnLogin" type="Bool">
+            <label>Automatically start on desktop login</label>
+            <default>false</default>
+        </entry>
+        <entry name="noWindowAfterStarting" type="Bool">
+            <label>Never show our window after the application initialization when running in service mode.</label>
+            <default>false</default>
+        </entry>
+        <entry name="englishLanguage" type="Bool">
+            <label>Do not translate the user interface and show the application in the original English language.</label>
+            <default>false</default>
+        </entry>
+        <entry name="reducePluginsListControls" type="Bool">
+            <label>Effect controls in the plugins list are shown inside a context menu</label>
+            <default>false</default>
+        </entry>
+        <entry name="xdgGlobalShortcuts" type="Bool">
+            <label>Enable support for XDG Global Shortcuts</label>
+            <default>false</default>
+        </entry>
+        <entry name="xdgGlobalShortcutsBound" type="Bool">
+            <label>True if global shortcuts have already been bound</label>
+            <default>false</default>
+        </entry>
+        <entry name="databaseAutosaveInterval" type="Int">
+            <label>Autosave interval. This timer is active only when our window is opened.</label>
+            <min>1000</min>
+            <max>60000</max>
+            <default>30000</default>
+        </entry>
+        <entry name="presetsAutoloadInterval" type="Int">
+            <label>Delay between receiving a new device route and the call to autoload a preset.</label>
+            <min>0</min>
+            <max>60000</max>
+            <default>1000</default>
+        </entry>
+        <entry name="maxMostUsedPresets" type="Int">
+            <label>How many presets to show in our most used presets list</label>
+            <min>1</min>
+            <max>100</max>
+            <default>5</default>
+        </entry>
+        <entry name="autoHideInlineMessageTimeout" type="Int">
+            <label>The amount of time in milliseconds an inline message is visible when the autohiding mode is enabled.</label>
+            <default>5000</default>
+        </entry>
+        <entry name="inputAutoloadingUsesFallback" type="Bool">
+            <label>When enabled presets autoloading will use a fallback when no profile is available for the target device.</label>
+            <default>false</default>
+        </entry>
+        <entry name="outputAutoloadingUsesFallback" type="Bool">
+            <label>When enabled presets autoloading will use a fallback when no profile is available for the target device.</label>
+            <default>false</default>
+        </entry>
+        <entry name="inputAutoloadingFallbackPreset" type="String">
+            <label>Fallback preset used when no profile is available for the target device</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="outputAutoloadingFallbackPreset" type="String">
+            <label>Fallback preset used when no profile is available for the target device</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="visiblePage" type="Enum">
+            <label>Saves the last viewed page.</label>
+            <choices>
+                <choice name="outputPage">
+                    <label>Output Page</label>
+                </choice>
+                <choice name="inputPage">
+                    <label>Input Page</label>
+                </choice>
+                <choice name="pwPage">
+                    <label>PipeWire Page</label>
+                </choice>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="visiblePresetSheetPage" type="Enum">
+            <label>Saves the last viewed page.</label>
+            <choices>
+                <choice name="localPage">
+                    <label>Local Page</label>
+                </choice>
+                <choice name="communityPage">
+                    <label>Community Page</label>
+                </choice>
+                <choice name="autoloadingPage">
+                    <label>Autoloading Page</label>
+                </choice>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="visibleAutoloadingTab" type="Enum">
+            <label>Saves the last viewed tab.</label>
+            <choices>
+                <choice name="outputTab">
+                    <label>Output Devices</label>
+                </choice>
+                <choice name="inputTab">
+                    <label>Input Devices</label>
+                </choice>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="visiblePipeWirePage" type="Enum">
+            <label>Saves the last viewed page.</label>
+            <choices>
+                <choice name="generalPage">
+                    <label>General Settings</label>
+                </choice>
+                <choice name="modulesPage">
+                    <label>Modules</label>
+                </choice>
+                <choice name="clientsPage">
+                    <label>Clients</label>
+                </choice>
+                <choice name="testSignalsPage">
+                    <label>Test Signals</label>
+                </choice>
+            </choices>
+            <default>0</default>
+        </entry>
+    </group>
+    <group name="Style">
+        <entry name="collapsePluginsList" type="Bool">
+            <label>Horizontally collapse plugins list sidebar</label>
+            <default>false</default>
+        </entry>
+        <entry name="forceBreezeTheme" type="Bool">
+            <label>Force KDE Breeze theme when Easy Effects starts</label>
+            <default>true</default>
+        </entry>
+    </group>
+    <group name="Presets">
+        <entry name="ignorePresetBlocklist" type="Bool">
+            <label>Ignore the preset blocklist field when loading the preset file.</label>
+            <default>false</default>
+        </entry>
+        <entry name="lastLoadedInputPreset" type="String">
+            <label>Last used input preset.</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="lastLoadedOutputPreset" type="String">
+            <label>Last used output preset.</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="lastLoadedInputCommunityPackage" type="String">
+            <label>Last used input community package.</label>
+            <default code="true">""</default>
+        </entry>
+        <entry name="lastLoadedOutputCommunityPackage" type="String">
+            <label>Last used output community package.</label>
+            <default code="true">""</default>
+        </entry>
+    </group>
+    <group name="EffectsPipelines">
+        <entry name="bypass" type="Bool">
+            <label>Global Bypass: Puts the Effects Pipelines in Passthrough Mode.</label>
+            <default>false</default>
+        </entry>
+        <entry name="resetBypassOnDeviceChange" type="Bool">
+            <label>Reset Global Bypass when the audio device changes.</label>
+            <default>true</default>
+        </entry>
+        <entry name="processAllOutputs" type="Bool">
+            <label>Automatically moves Audio Streams to Easy Effects Virtual Sink.</label>
+            <default>true</default>
+        </entry>
+        <entry name="outputSinkBlocklist" type="StringList">
+            <label>Output Sinks Where Automatic Output Processing Is Disabled.</label>
+            <default></default>
+        </entry>
+        <entry name="processAllInputs" type="Bool">
+            <label>Automatically moves Audio Streams to Easy Effects Virtual Source.</label>
+            <default>true</default>
+        </entry>
+        <entry name="inputSourceBlocklist" type="StringList">
+            <label>Input Sources Where Automatic Input Processing Is Disabled.</label>
+            <default></default>
+        </entry>
+        <entry name="excludeMonitorStreams" type="Bool">
+            <label>Ignore Streams from Monitor of Devices.</label>
+            <default>true</default>
+        </entry>
+        <entry name="useCubicVolumes" type="Bool">
+            <label>Use Cubic Volume.</label>
+            <default>false</default>
+        </entry>
+        <entry name="ignoreSystemNotifications" type="Bool">
+            <label>Do not apply effects to system notifications.</label>
+            <default>true</default>
+        </entry>
+        <entry name="linkDelayEnable" type="Bool">
+            <label>Enable the Link Delay</label>
+            <default>true</default>
+        </entry>
+        <entry name="linkDelay" type="Int">
+            <label>Delay applied before linking the audio filters</label>
+            <min>1</min>
+            <max>1000</max>
+            <default>100</default>
+        </entry>
+        <entry name="outputInactivityTimerEnable" type="Bool">
+            <label>Enable the Output Inactivity Timeout</label>
+            <default>true</default>
+        </entry>
+        <entry name="outputInactivityTimeout" type="Int">
+            <label>Output Inactivity Timeout.</label>
+            <min>1</min>
+            <max>3600</max>
+            <default>10</default>
+        </entry>
+        <entry name="inputInactivityTimerEnable" type="Bool">
+            <label>Enable the Input Inactivity Timeout</label>
+            <default>true</default>
+        </entry>
+        <entry name="inputInactivityTimeout" type="Int">
+            <label>Input Inactivity Timeout.</label>
+            <min>1</min>
+            <max>3600</max>
+            <default>10</default>
+        </entry>
+    </group>
+    <group name="Audio">
+        <entry name="levelMetersLabelTimer" type="Int">
+            <label>Time it takes for the level meters label to be updated. This is only used while the current level is below the last highest level.</label>
+            <min>1</min>
+            <max>10000</max>
+            <default>2500</default>
+        </entry>
+        <entry name="enableLevelMetersAnimation" type="Bool">
+            <label>Enable or disable animations for the level meters</label>
+            <default>true</default>
+        </entry>
+        <entry name="levelMetersAnimationDuration" type="Int">
+            <label>Duration of the animation used in the level meters.</label>
+            <min>1</min>
+            <max>10000</max>
+            <default>300</default>
+        </entry>
+        <entry name="levelMetersFpsCap" type="Int">
+            <label>Maximum level meter update rate.</label>
+            <min>1</min>
+            <max>240</max>
+            <default>60</default>
+        </entry>
+        <entry name="copyFilterInputBuffers" type="Bool">
+            <label>Use a copy of the input buffer given by PipeWire when applying effects inside each audio plugin. This fixes audio glitches that can happen when external applications are recording from our virtual devices monitors.</label>
+            <default>false</default>
+        </entry>
+        <entry name="activateMonitorChannelVolumes" type="Bool">
+            <label>Activate Monitor Channel Volumes. In other words our virtual devices volume and mute state can be controlled.</label>
+            <default>false</default>
+        </entry>
+    </group>
+    <group name="NativePluginWindow">
+        <entry name="showNativePluginUi" type="Bool">
+            <label>Show Plugin's Native Window</label>
+            <default>false</default>
+        </entry>
+        <entry name="lv2uiUpdateFrequency" type="Int">
+            <label>LV2 Native Window Update Frequency</label>
+            <min>1</min>
+            <max>60</max>
+            <default>30</default>
+        </entry>
+    </group>
+</kcfg>

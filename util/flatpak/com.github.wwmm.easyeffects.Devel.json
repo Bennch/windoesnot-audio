@@ -1,0 +1,121 @@
+{
+    "id": "com.github.wwmm.easyeffects.Devel",
+    "runtime": "org.kde.Platform",
+    "runtime-version": "6.11",
+    "sdk": "org.kde.Sdk",
+    "branch": "stable",
+    "command": "easyeffects",
+    "finish-args": [
+        "--share=ipc",
+        "--socket=fallback-x11",
+        "--talk-name=org.kde.StatusNotifierWatcher",
+        "--socket=wayland",
+        "--device=dri",
+        "--filesystem=xdg-run/pipewire-0:ro",
+        "--env=LV2_PATH=/app/lib/lv2:/app/extensions/Plugins/lv2",
+        "--env=LADSPA_PATH=/app/lib/ladspa"
+    ],
+    "cleanup": [
+        "*.a",
+        "*.h",
+        "*.la",
+        "/bin/analyseplugin",
+        "/bin/applyplugin",
+        "/bin/listplugins",
+        "/include",
+        "/lib/aarch64-linux-gnu/cmake",
+        "/lib/cmake",
+        "/lib/pkgconfig",
+        "/lib/python*",
+        "/mkspecs",
+        "/share/aclocal",
+        "/share/cmake",
+        "/share/doc",
+        "/share/info",
+        "/share/man",
+        "/share/pkgconfig"
+    ],
+    "add-extensions": {
+        "io.github.wwmm.easyeffects.Presets": {
+            "directory": "extensions/Presets",
+            "merge-dirs": "input;output;irs;rnnoise",
+            "subdirectories": true,
+            "no-autodownload": true,
+            "autodelete": true
+        },
+        "org.freedesktop.LinuxAudio.Plugins": {
+            "directory": "extensions/Plugins",
+            "version": "25.08",
+            "add-ld-path": "lib",
+            "merge-dirs": "lv2",
+            "subdirectories": true,
+            "no-autodownload": true
+        },
+        "org.freedesktop.LinuxAudio.Plugins.Calf": {
+            "directory": "extensions/Plugins/Calf",
+            "version": "25.08",
+            "add-ld-path": "lib",
+            "merge-dirs": "lv2",
+            "autodelete": false,
+            "subdirectories": true
+        },
+        "org.freedesktop.LinuxAudio.Plugins.LSP": {
+            "directory": "extensions/Plugins/LSP",
+            "version": "25.08",
+            "add-ld-path": "lib",
+            "merge-dirs": "lv2",
+            "autodelete": false,
+            "subdirectories": true
+        },
+        "org.freedesktop.LinuxAudio.Plugins.ZamPlugins": {
+            "directory": "extensions/Plugins/ZamPlugins",
+            "version": "25.08",
+            "add-ld-path": "lib",
+            "merge-dirs": "lv2",
+            "autodelete": false,
+            "subdirectories": true
+        },
+        "org.freedesktop.LinuxAudio.Plugins.MDA": {
+            "directory": "extensions/Plugins/MDA",
+            "version": "25.08",
+            "add-ld-path": "lib",
+            "merge-dirs": "lv2",
+            "autodelete": false,
+            "subdirectories": true
+        },
+        "org.freedesktop.LinuxAudio.Plugins.x42Plugins": {
+            "directory": "extensions/Plugins/x42Plugins",
+            "version": "25.08",
+            "add-ld-path": "lib",
+            "merge-dirs": "lv2",
+            "autodelete": false,
+            "subdirectories": true
+        }
+    },
+    "modules": [
+        {
+            "name": "easyeffects",
+            "buildsystem": "cmake-ninja",
+            "config-opts": [
+                "-DENABLE_DEVEL=1",
+                "-DENABLE_LIBPORTAL=1",
+                "-DCMAKE_BUILD_TYPE=Debug"
+            ],
+            "run-tests": true,
+            "sources": [
+                {
+                    "//": "Should be type: git for downstream sources, e.g. for the flathub package. This ensures the commit can be found for the build debug info. Type dir works everywhere else I have tested.",
+                    "type": "dir",
+                    "path": "../../"
+                }
+            ],
+            "post-install": [
+                "mkdir -pm755 $FLATPAK_DEST/extensions/Presets",
+                "mkdir -pm755 $FLATPAK_DEST/extensions/Plugins"
+            ],
+            "modules": [
+                "easyeffects-modules.json"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,394 @@
+on:
+  push:
+    branches-ignore:
+      # dependabot branches will fail on push since they run with fork-level permissions despite being in the main repo.
+      # said branches are tested anyhow when dependabot makes its PR and the pull_request triggers the run.
+      - 'dependabot/**'
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+name: CI
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-24.04
+    outputs:
+      github_commit_desc: ${{ steps.get_commit_desc.outputs.github_commit_desc }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Get head branch latest commit
+        run: echo "GITHUB_PR_HEAD_SHA=$(git log --pretty=format:'%h' $GITHUB_SHA^2 -1)" >> $GITHUB_ENV
+
+      - name: Get base branch latest commit
+        run: echo "GITHUB_PR_BASE_SHA=$(git log --pretty=format:'%h' $GITHUB_SHA^1 -1)" >> $GITHUB_ENV
+
+      - name: Get latest commit
+        run: echo "GITHUB_HEAD_SHA=$(git log --pretty=format:'%h' -1)" >> $GITHUB_ENV
+      
+      # on a pull_request event in github actions, the tests are not run on the head branch of the PR, rather they are run on the merge commit of head merged into the base branch
+      # this means the latest commit in github actions, which is used for build artifact names is a commit that does not exist in the repository
+      # so on pull requests we create a user-friendly string to use in place of the merge commit sha, otherwise we just use the normal git HEAD sha.
+      - id: get_commit_desc
+        run: | 
+          if [[ ${{ github.event_name }} == 'pull_request' ]]; then
+            echo "github_commit_desc=merge-${{ env.GITHUB_PR_HEAD_SHA }}-into-${{ env.GITHUB_PR_BASE_SHA }}" >> $GITHUB_OUTPUT
+          else
+            echo "github_commit_desc=${{ env.GITHUB_HEAD_SHA }}" >> $GITHUB_OUTPUT
+          fi
+
+  flatpak-build:
+    name: Flatpak build (${{ matrix.variant.arch }})
+    env:
+      FLATPAK_BUILD_PATH: flatpak_app/files/share
+    needs: prepare
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      options: --privileged
+    strategy:
+      matrix:
+        variant:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+      fail-fast: false
+    runs-on: ${{ matrix.variant.runner }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7.0.1
+
+    - name: Enable errors on warnings
+      run: |
+        # jq does not have an option to save edits in place so we should make a temporary file to edit this safely
+        updated_manifest=$(mktemp)
+        jq '.modules[0]."config-opts" += ["-Dwerror=true"]' util/flatpak/com.github.wwmm.easyeffects.Devel.json > "$updated_manifest"
+        mv "$updated_manifest" util/flatpak/com.github.wwmm.easyeffects.Devel.json
+
+    - uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
+      with:
+        bundle: easyeffects-flatpak-${{ needs.prepare.outputs.github_commit_desc }}.flatpak
+        manifest-path: util/flatpak/com.github.wwmm.easyeffects.Devel.json
+        # put the arch earlier in this string, to help avoid using caches from the wrong architecture
+        cache-key: flatpak-builder-${{ matrix.variant.arch }}-${{ github.sha }}
+        arch: ${{ matrix.variant.arch }}
+        run-tests: true
+
+  flatpak-lint:
+    name: Flatpak lint
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7.0.1
+  
+    # this just validates, actual update PRs are done in flatpak-update.yaml
+    - name: Verify flatpak external data checker metadata
+      uses: docker://ghcr.io/flathub/flatpak-external-data-checker:latest
+      with:
+        args: util/flatpak/com.github.wwmm.easyeffects.Devel.json
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Write exceptions file
+      run: |
+        echo '{"com.github.wwmm.easyeffects.Devel": ["appid-uses-code-hosting-domain", "toplevel-unnecessary-branch"]}' > exceptions.json
+
+    - name: Verify flatpak builder lint
+      uses: docker://ghcr.io/flathub/flatpak-builder-lint:latest
+      with:
+        args: --exceptions --user-exceptions exceptions.json manifest util/flatpak/com.github.wwmm.easyeffects.Devel.json
+
+  arch-linux:
+    name: Arch Linux
+    runs-on: ubuntu-24.04
+    needs: prepare
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7.0.1
+      with:
+        # needed for getting git describe info for pkgver() in pkgbuild
+        fetch-depth: 0
+
+    - name: Save commit description to file
+      # if this file is present, pkgver() in pkgbuild will use it to show a more user-friendly commit sha
+      run: echo ${{ needs.prepare.outputs.github_commit_desc }} >> GITHUB_COMMIT_DESC
+
+    - name: Makepkg Build and Check
+      id: makepkg
+      uses: edlanglois/pkgbuild-action@v1.1.9
+      with:
+        # namcap doesn't actually exclude this rule, resulting in unnecessary warnings, so just disable namcap since it's not critical
+        # namcapExcludeRules: unusedsodepends
+        namcapDisable: true
+
+    - name: Upload Package Archive
+      uses: actions/upload-artifact@v7.0.2
+      with:
+        name: easyeffects-archlinux-${{ needs.prepare.outputs.github_commit_desc }}-x86_64
+        path: ${{ steps.makepkg.outputs.pkgfile0 }}
+        if-no-files-found: error
+
+  opensuse-tumbleweed:
+    name: openSUSE Tumbleweed
+    runs-on: ubuntu-24.04
+    strategy:
+      # test with latest versions of gcc and clang in their default configurations with libstdc++
+      matrix:
+        compiler: [gcc, clang]
+      fail-fast: false
+    container:
+      image: opensuse/tumbleweed
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+
+    - name: Install deps
+      run: |
+        # run commands twice as they can fail intermittently due to network errors
+
+        # needed for webrtc-audio-processing, seems reasonably official
+        zypper addrepo https://download.opensuse.org/repositories/multimedia:libs/openSUSE_Tumbleweed/multimedia:libs.repo || \
+        zypper addrepo https://download.opensuse.org/repositories/multimedia:libs/openSUSE_Tumbleweed/multimedia:libs.repo
+
+        # auto import keys needed due to custom repository
+        zypper --gpg-auto-import-keys refresh || \
+        zypper --gpg-auto-import-keys refresh
+  
+        zypper update -y || \
+        zypper update -y
+
+        # install general build deps
+        zypper install -y gcc gcc-c++ clang libomp-devel cmake extra-cmake-modules ninja bash || \
+        zypper install -y gcc gcc-c++ clang libomp-devel cmake extra-cmake-modules ninja bash
+
+        # inspired by https://src.fedoraproject.org/rpms/easyeffects/raw/rawhide/f/easyeffects.spec
+        # and https://build.opensuse.org/projects/openSUSE:Factory/packages/easyeffects/files/easyeffects.spec
+        depends="
+        lv2
+        appstream-glib
+        qt6-core-devel
+        qt6-graphs-devel
+        qt6-quickshapes-devel
+        qt6-quickcontrols2-devel
+        kf6-qqc2-desktop-style-devel
+        kf6-kiconthemes-devel
+        kf6-kirigami-devel
+        kf6-ki18n-devel
+        kf6-kcolorscheme
+        kf6-kconfigwidgets-devel
+        kf6-kconfig-devel
+        kf6-kcoreaddons-devel
+        kirigami-addons6-devel
+        kf6-qqc2-desktop-style
+        breeze
+        desktop-file-utils
+        itstool
+        libxml2-devel
+        fftw3-devel
+        libbs2b-devel
+        libebur128-devel
+        pipewire-devel
+        liblilv-0-devel
+        libsndfile-devel
+        zita-convolver-devel 
+        rnnoise-devel
+        speexdsp-devel
+        nlohmann_json-devel
+        tbb-devel
+        gsl-devel
+        speex-devel
+        soundtouch-devel
+        ladspa-devel
+        libwebrtc-audio-processing-devel
+        libmysofa-devel
+        "
+
+        # install easyeffects deps
+        zypper install -y $depends || \
+        zypper install -y $depends
+
+    - name: Build with gcc
+      if: matrix.compiler == 'gcc'
+      run: |
+        CC=gcc CXX=g++ cmake -B build -S . -G Ninja -Wno-dev
+        cmake --build build
+
+    - name: Build with clang
+      if: matrix.compiler == 'clang'
+      run: |
+        CC=clang CXX=clang++ cmake -B build -S . -G Ninja -Wno-dev
+        cmake --build build
+
+  codeql-analyze:
+    name: CodeQL Analyze
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+    container:
+      image: archlinux
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+
+    - name: Install deps
+      run: |
+        # install general build deps
+        pacman -Syu --noconfirm ninja gcc pkgconf python3 python-pip which
+        # install easyeffects deps
+        source ./PKGBUILD && pacman -Syu --noconfirm --needed --asdeps "${makedepends[@]}" "${depends[@]}"
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4.39.1
+      with:
+        languages: cpp 
+        build-mode: manual
+    
+    - name: Building
+      run: |
+        cmake -B build -S . -G Ninja -Wno-dev
+        cmake --build build
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4.39.1
+
+  clang-tidy:
+    name: Clang Tidy
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+
+    - name: Install deps
+      run: |
+        # install general build deps
+        pacman -Syu --noconfirm ninja gcc pkgconf python3 python-pip which
+        # install easyeffects deps
+        source ./PKGBUILD && pacman -Syu --noconfirm --needed --asdeps "${makedepends[@]}" "${depends[@]}"
+        # install clang
+        pacman -S --noconfirm --needed --asdeps clang openmp
+
+    - name: Build with Clang
+      # build with clang not because we strictly need to (we do need to do some kind of build so config.h shows up)
+      # but because any clang compiler failures will cause clang-tidy to fail later on, so we might as well fail fast
+      run: |
+        CC=clang CXX=clang++ cmake -B build -S . -G Ninja -Wno-dev
+        cmake --build build
+
+    - name: Install ctcache
+      run: |
+        git clone https://github.com/matus-chochlik/ctcache
+        cd ctcache
+        git checkout bd1620a8609ddaf2f64500820abc8b4d150edeaf # v1.1.0
+        ./install-user-client
+
+    - name: Restore Clang Tidy cache
+      uses: actions/cache/restore@v6.1.0
+      with:
+        # since the ctcache is just a list of checksums that were checked, we want to write to it every ci run to keep it up to date
+        # otherwise github actions just restores some old cache if the key didn't change
+        # the ctcache itself is what handles what misses or not
+        # https://github.com/actions/cache/blob/ea0503788c59256f4da17725d04df850ca027df5/tips-and-workarounds.md#update-a-cache
+        path: /tmp/ci-ctcache
+        key: clang-tidy-ctcache-${{ github.run_id }}
+        # this restores the most recently saved cache from the following 3 categories 
+        # it first checks caches from the current branch/pull request, then the base branch of the pull request (if it exists), and then master (the default branch), as described here:
+        # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key
+        # this also relies on github's fairly restricted isolation for caches:
+        # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#restrictions-for-accessing-a-cache
+        # note the most recently saved cache is not necessarily the one with the greatest run id, as a workflow run could have started before another but taken longer to complete
+        restore-keys: |
+          clang-tidy-ctcache-
+
+    - name: Clang Tidy
+      run: |
+        cd build
+        PATH=~/.local/bin:"$PATH" CTCACHE_DIR=/tmp/ci-ctcache ../util/clang-tidy.sh
+
+    - name: Save Clang Tidy cache
+      uses: actions/cache/save@v6.1.0
+      # always run, except if the workflow was cancelled
+      # this means clang tidy will get cached even if some checks are failing
+      if: success() || failure()
+      with:
+        path: /tmp/ci-ctcache
+        key: clang-tidy-ctcache-${{ github.run_id }}
+
+  appstream-news-validate:
+    name: AppStream and News validate
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+      
+      - name: Install deps
+        run: | 
+          # appstream deps
+          pacman -Syu --noconfirm appstream appstream-glib
+          # install general build deps
+          pacman -Syu --noconfirm ninja gcc pkgconf python3 python-pip which
+          # install easyeffects deps
+          source ./PKGBUILD && pacman -Syu --noconfirm --needed --asdeps "${makedepends[@]}" "${depends[@]}"
+
+      - name: Validate existing files
+        run: ./util/update-release-files.sh --no-new-release
+
+  check-kcfg:
+    name: Check KCFG
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Run KCFG numeric-defaults checker
+        run: ./util/check-kcfg-numeric-defaults.sh
+
+  check-qmlformat:
+    name: Check QML format
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux
+    steps:
+      # install deps first to get git for later on
+      - name: Install deps
+        run: pacman -Syu --noconfirm qt6-declarative git
+
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set git permissions
+        # workarounds the permission differences due to this being run in a container
+        run: git config --global --add safe.directory $PWD
+
+      - name: Run QML format
+        run: ./util/qmlformat.sh
+
+      - name: Check git diff
+        run: git diff --quiet --exit-code || { echo 'git showed a diff after running qmlformat, did you forget to run ./util/qmlformat.sh? The following files need to be formatted:'; git diff; exit 1; }
+
+  check-qmllint:
+    name: Check QML lint
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Install deps
+        run: pacman -Syu --noconfirm qt6-declarative
+
+      - name: Run QML lint
+        run: ./util/qmllint.sh
+

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name="easyeffects/db/autogainrc">
+        <parameter name="masterGroup" />
+        <parameter name="instanceIndex" />
+    </kcfgfile>
+    <group parentGroupName="$(masterGroup)" name="Autogain#$(instanceIndex)">
+        <entry name="bypass" type="Bool">
+            <label></label>
+            <default>false</default>
+        </entry>
+        <entry name="inputGain" type="Double">
+            <label></label>
+            <min>-36</min>
+            <max>36</max>
+            <default>0</default>
+        </entry>
+        <entry name="outputGain" type="Double">
+            <label></label>
+            <min>-36</min>
+            <max>36</max>
+            <default>0</default>
+        </entry>
+        <entry name="target" type="Double">
+            <label></label>
+            <min>-100</min>
+            <max>0</max>
+            <default>-23</default>
+        </entry>
+        <entry name="referenceLabels" type="StringList">
+            <default>Momentary,Shortterm,Integrated,Geometric Mean (MSI),Geometric Mean (MS),Geometric Mean (MI),Geometric Mean (SI)</default>
+        </entry>
+        <entry name="reference" type="Int">
+            <label>Reference</label>
+            <default>3</default>
+        </entry>
+        <entry name="maximumHistory" type="Int">
+            <label></label>
+            <min>6</min>
+            <max>3600</max>
+            <default>15</default>
+        </entry>
+        <entry name="silenceThreshold" type="Double">
+            <label></label>
+            <min>-100</min>
+            <max>0</max>
+            <default>-70</default>
+        </entry>
+        <entry name="forceSilence" type="Bool">
+            <label></label>
+            <default>false</default>
+        </entry>
+    </group>
+</kcfg>

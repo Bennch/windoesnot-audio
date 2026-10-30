@@ -1,0 +1,10 @@
+File=easyeffects_db.kcfg
+ClassName=DbMain
+Inherits=KConfigBaseEE
+IncludeFiles=\"kconfig_base_ee.hpp\"
+Mutators=true
+Notifiers=true
+DefaultValueGetters=true
+Singleton=true
+GenerateProperties=true
+QmlRegistration=true
