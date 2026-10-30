@@ -433,42 +433,20 @@ int main(int argc, char* argv[]) {
 
   KAboutData::setApplicationData(about);
 
-  // No KDE color-scheme files are installed on this (minimal Hyprland)
-  // desktop, so KColorSchemeManager has nothing to activate and the app
-  // falls back to Qt's light default regardless of system theme. Force a
-  // palette directly from the shared WinDoesNot desktop setting instead.
+  // Proper KDE theming path: activate a real installed .colors scheme by id
+  // (src/contents/color-schemes/WinDoesNotDark.colors). This is what Kirigami
+  // QML content actually reads; a hand-forced QPalette (tried first) only
+  // applies to QWidget/QtQuickControls2-Fusion chrome, not Kirigami's own
+  // Theme object, and left the window background light regardless.
+  auto* colorSchemeManager = KColorSchemeManager::instance();
   {
     const auto prefs = windoesnot::read_prefs();
-    const QColor accent(254, 111, 45);  // WinDoesNot accent
     if (prefs.darkModeSet && prefs.dark) {
-      QPalette dark;
-      dark.setColor(QPalette::Window, QColor(35, 35, 35));
-      dark.setColor(QPalette::WindowText, QColor(239, 239, 239));
-      dark.setColor(QPalette::Base, QColor(24, 24, 24));
-      dark.setColor(QPalette::AlternateBase, QColor(35, 35, 35));
-      dark.setColor(QPalette::Text, QColor(239, 239, 239));
-      dark.setColor(QPalette::Button, QColor(45, 45, 45));
-      dark.setColor(QPalette::ButtonText, QColor(239, 239, 239));
-      dark.setColor(QPalette::ToolTipBase, QColor(45, 45, 45));
-      dark.setColor(QPalette::ToolTipText, QColor(239, 239, 239));
-      dark.setColor(QPalette::Highlight, accent);
-      dark.setColor(QPalette::HighlightedText, Qt::white);
-      dark.setColor(QPalette::PlaceholderText, QColor(150, 150, 150));
-      dark.setColor(QPalette::Disabled, QPalette::WindowText, QColor(110, 110, 110));
-      dark.setColor(QPalette::Disabled, QPalette::Text, QColor(110, 110, 110));
-      QApplication::setPalette(dark);
-    } else if (prefs.darkModeSet && !prefs.dark) {
-      // Light mode: Qt's own default light palette is fine, just apply
-      // the WinDoesNot accent color for visual consistency with the
-      // other apps (Store, Settings, Bluetooth, Network).
-      QPalette light = QApplication::palette();
-      light.setColor(QPalette::Highlight, accent);
-      light.setColor(QPalette::HighlightedText, Qt::white);
-      QApplication::setPalette(light);
+      colorSchemeManager->activateSchemeId(QStringLiteral("WinDoesNotDark"));
     }
+    // Light mode: leave whatever KColorSchemeManager already activated
+    // (its own default/last-used scheme) - no WinDoesNot light scheme yet.
   }
-
-  KColorSchemeManager::instance();
 
   // Parsing command line options
 

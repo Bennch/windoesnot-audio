@@ -28,3 +28,11 @@ install(FILES
     DESTINATION ${KDE_INSTALL_APPDIR}
     RENAME ${APPLICATION_ID}.desktop
 )
+
+# Proper KDE theming path: a real color-scheme file Kirigami/KColorSchemeManager
+# can activate, instead of forcing QPalette by hand (which Kirigami QML content
+# only partially follows). See src/windoesnot_settings.cpp / main.cpp.
+install(FILES
+    color-schemes/WinDoesNotDark.colors
+    DESTINATION ${KDE_INSTALL_FULL_DATADIR}/color-schemes
+)
