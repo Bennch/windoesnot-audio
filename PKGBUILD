@@ -3,7 +3,7 @@
 # Upstream: https://github.com/wwmm/easyeffects
 
 pkgname=windoesnot-audio
-pkgver=pkgvernotupdated
+pkgver=8.3.1
 pkgrel=1
 pkgdesc='Audio effects, equalizer and filters for WinDoesNot'
 arch=(x86_64)
@@ -47,36 +47,21 @@ optdepends=('calf: exciter, bass enhancer and others'
 conflicts=(easyeffects)
 provides=(easyeffects)
 replaces=('pulseeffects')
-sha512sums=()
-
-pkgver() {
-  description=$(git describe --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')
-  # if in github actions environment
-  if test -f "../GITHUB_COMMIT_DESC"; then
-    # remove last commit from git describe output (which may sometimes be a merge commit),
-    # and replace it with a human friendly version
-    description_short=$(echo "$description" | sed -r 's/(.*)\..*/\1/')
-    github_commit_desc_no_hyphen=$(sed 's/-/./g' ../GITHUB_COMMIT_DESC)
-    printf "%s" "${description_short}.${github_commit_desc_no_hyphen}"
-  else
-    printf "%s" "$description"
-  fi
-}
+source=()
+sha256sums=()
 
 build() {
-  cd ..
-
+  cd "$pkgname-$pkgver"
   cmake \
-    -B build  \
+    -B build \
     -S . \
     -G Ninja \
     -DCMAKE_INSTALL_PREFIX:PATH='/usr' \
     -Wno-dev
-
   cmake --build build
 }
 
 package() {
-  cd ..
+  cd "$pkgname-$pkgver"
   DESTDIR="${pkgdir}" cmake --install build
 }
