@@ -1,14 +1,13 @@
-# This PKGBUILD is intended for our github workflows. For building your custom packages use the file PKGBUILD_AUR
+# WinDoesNot fork of easyeffects, rebranded (me.windoesnot.Audio) with a
+# WinDoesNot dark color scheme. See WINDOESNOT-INTEGRATION.md.
+# Upstream: https://github.com/wwmm/easyeffects
 
-# Contributor: Wellington <wellingtonwallace@gmail.com>
-# Maintainer: Upstream https://github.com/wwmm/easyeffects
-
-pkgname=easyeffects-git
+pkgname=windoesnot-audio
 pkgver=pkgvernotupdated
 pkgrel=1
-pkgdesc='Simple audio effects'
+pkgdesc='Audio effects, equalizer and filters for WinDoesNot'
 arch=(x86_64)
-url='https://github.com/wwmm/easyeffects'
+url='https://github.com/Bennch/windoesnot-audio'
 license=('GPL3')
 depends=(
   'kcolorscheme'

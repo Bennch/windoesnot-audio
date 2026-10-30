@@ -38,8 +38,6 @@ DesktopPrefs read_prefs() {
     }
   }
 
-  fprintf(stderr, "[windoesnot] settings path=%s darkModeSet=%d dark=%d\n",
-          qPrintable(file.fileName()), prefs.darkModeSet, prefs.dark);
   return prefs;
 }
 
