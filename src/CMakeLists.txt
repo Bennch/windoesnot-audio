@@ -141,6 +141,7 @@ qt_add_qml_module(easyeffects
 )
 
 target_sources(easyeffects PRIVATE
+    windoesnot_settings.cpp
     autogain.cpp
     autogain_preset.cpp
     autostart.cpp

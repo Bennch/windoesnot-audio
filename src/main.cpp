@@ -43,6 +43,9 @@
 #include <QQuickWindow>
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <QPalette>
+
+#include "windoesnot_settings.hpp"
 #include <csignal>
 #include <format>
 #include <memory>
@@ -430,6 +433,32 @@ int main(int argc, char* argv[]) {
 
   KAboutData::setApplicationData(about);
 
+  // No KDE color-scheme files are installed on this (minimal Hyprland)
+  // desktop, so KColorSchemeManager has nothing to activate and the app
+  // falls back to Qt's light default regardless of system theme. Force a
+  // palette directly from the shared WinDoesNot desktop setting instead.
+  {
+    const auto prefs = windoesnot::read_prefs();
+    if (prefs.darkModeSet && prefs.dark) {
+      QPalette dark;
+      dark.setColor(QPalette::Window, QColor(35, 35, 35));
+      dark.setColor(QPalette::WindowText, QColor(239, 239, 239));
+      dark.setColor(QPalette::Base, QColor(24, 24, 24));
+      dark.setColor(QPalette::AlternateBase, QColor(35, 35, 35));
+      dark.setColor(QPalette::Text, QColor(239, 239, 239));
+      dark.setColor(QPalette::Button, QColor(45, 45, 45));
+      dark.setColor(QPalette::ButtonText, QColor(239, 239, 239));
+      dark.setColor(QPalette::ToolTipBase, QColor(45, 45, 45));
+      dark.setColor(QPalette::ToolTipText, QColor(239, 239, 239));
+      dark.setColor(QPalette::Highlight, QColor(254, 111, 45));  // WinDoesNot accent
+      dark.setColor(QPalette::HighlightedText, Qt::white);
+      dark.setColor(QPalette::PlaceholderText, QColor(150, 150, 150));
+      dark.setColor(QPalette::Disabled, QPalette::WindowText, QColor(110, 110, 110));
+      dark.setColor(QPalette::Disabled, QPalette::Text, QColor(110, 110, 110));
+      QApplication::setPalette(dark);
+    }
+  }
+
   KColorSchemeManager::instance();
 
   // Parsing command line options
@@ -473,8 +502,13 @@ int main(int argc, char* argv[]) {
     QApplication::setStyle(QStringLiteral("breeze"));
   }
 
+  // "org.kde.desktop" needs Plasma's style integration plugin (Breeze
+  // .colors files etc), none of which is installed on this minimal
+  // Hyprland desktop; it silently falls back to a hardcoded light theme
+  // and ignores the QPalette set above. "Fusion" follows QPalette
+  // directly, so it correctly picks up WinDoesNot's dark/light + accent.
   if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
-    QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+    QQuickStyle::setStyle(QStringLiteral("Fusion"));
   }
 
   QQmlApplicationEngine engine;

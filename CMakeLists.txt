@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.28)
 
 project(easyeffects VERSION 8.3.1  LANGUAGES CXX C)
 
-set(APPLICATION_DOMAIN "windoesnot-audio")
+# Must stay "easyeffects": po/ translations (de.po etc, 780+ strings
+# already translated upstream) are compiled under this domain. Renaming
+# it would silently break all i18n (confirmed: caused English-only UI).
+set(APPLICATION_DOMAIN "easyeffects")
 set(COMPONENT_NAME "windoesnot-audio")
 set(ORGANIZATION_NAME "WinDoesNot")
 set(ORGANIZATION_DOMAIN "me.windoesnot")
