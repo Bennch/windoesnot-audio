@@ -105,3 +105,31 @@ cmake --install build --prefix /usr
 
 - [ ] New ISO test and validation
 - [ ] Confirmation of audio integration approach (standalone vs. Settings panel)
+
+## Update 2026-10-30, later: i18n + theme verified working
+
+Live-tested (built, installed to local prefix, screenshot-verified):
+
+- **German i18n**: fixed. Root cause was my own earlier mistake - renamed
+  APPLICATION_DOMAIN away from "easyeffects", breaking lookup of the
+  780+ strings already translated upstream in po/de/. Domain reverted,
+  German works automatically via system LANG (no custom code needed).
+- **Dark theme**: fixed. Added `windoesnot_settings.{hpp,cpp}` reading
+  darkMode from `~/.config/quickshell/default/settings.txt` (same
+  pattern as store/bluetooth/network), forces dark QPalette + WinDoesNot
+  accent color. Also had to switch default QQuickStyle from
+  "org.kde.desktop" to "Fusion" - the former needs Plasma's Breeze
+  .colors files (not installed on this minimal Hyprland desktop) and
+  silently stays light regardless of QPalette.
+
+## Still open / not done
+
+- Full visual redesign to match Store's sidebar/card layout: **not
+  pursued** - easyeffects is a structurally different tool (effect
+  chain editor + spectrum analyzer), not a list/grid app. Dark theme +
+  accent color achieved instead, which is the realistic scope.
+- Light mode not tested (only dark, since host is dark) - should work
+  symmetrically since QPalette light branch (prefs.darkModeSet && !dark)
+  isn't written yet, only the dark branch - FIXME before shipping.
+- Binary target still named `easyeffects` internally (cosmetic, documented earlier).
+- No PKGBUILD/ISO packaging work done yet.
