@@ -1,7 +1,28 @@
 # EasyEffects → WinDoesNot Audio Integration
 
-**Status**: Base clone retrieved  
+**Status**: App ID/branding rebrand done (commit b7af93b). Build/test NOT yet run.  
 **Date**: 2026-10-30
+
+## Done
+
+- APPLICATION_ID/NAME: `me.windoesnot.Audio`
+- D-Bus bus name + object paths rebranded in `src/tags_app.hpp`
+- desktop.in, metainfo.xml.in, all icon svgs renamed
+- `src/contents/CMakeLists.txt` install() rules updated to match
+
+## Deliberately skipped (documented, not blocking)
+
+- Binary target name stays `easyeffects` internally (17+ CMake call sites
+  in src/CMakeLists.txt). Zero user-visible impact — desktop Exec= already
+  points to it. Rename later if desired, low priority.
+- metainfo.xml.in description/developer/license text left as upstream
+  (GPL attribution requirement for a fork, not a rewrite).
+
+## NOT done yet
+
+- No build attempted — verify CMake config succeeds with new names
+- CSS/QML theming to match WinDoesNot colors/radius
+- Locale: check existing po/ files, no de/en-specific work done
 
 ## Current State
 
