@@ -23,13 +23,13 @@ namespace tags::app {
 
 inline constexpr auto minimum_pw_version = "0.3.70";
 
-inline constexpr auto id = "com.github.wwmm.easyeffects";
+inline constexpr auto id = "me.windoesnot.Audio";
 
-inline constexpr auto path = "/com/github/wwmm/easyeffects";
+inline constexpr auto path = "/me/windoesnot/Audio";
 
-inline constexpr auto path_stream_inputs = "/com/github/wwmm/easyeffects/streaminputs/";
+inline constexpr auto path_stream_inputs = "/me/windoesnot/Audio/streaminputs/";
 
-inline constexpr auto path_stream_outputs = "/com/github/wwmm/easyeffects/streamoutputs/";
+inline constexpr auto path_stream_outputs = "/me/windoesnot/Audio/streamoutputs/";
 
 inline constexpr auto flatpak_info_file = "/.flatpak-info";
 
