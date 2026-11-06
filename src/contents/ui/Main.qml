@@ -103,6 +103,10 @@ Kirigami.ApplicationWindow {
     }
 
     Component.onCompleted: {
+        // Start on Players (the streams of the output side), whatever was open last.
+        DbMain.visiblePage = 0;
+        DbStreamOutputs.visiblePage = 0;
+
         if (canUseSysTray) {
             trayIcon = Qt.createComponent("TrayIcon.qml").createObject(appWindow, {
                 shortcuts: shortcutsSheet,
@@ -320,6 +324,35 @@ Kirigami.ApplicationWindow {
                 rightMargin: Kirigami.Units.smallSpacing
             }
 
+            // WinDoesNot brand, as at the top of Store, Network and Bluetooth.
+            RowLayout {
+                id: brand
+
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Image {
+                    // The light logo on dark backgrounds, the dark one on light ones.
+                    readonly property bool darkTheme: Kirigami.Theme.backgroundColor.hslLightness < 0.5
+
+                    Layout.preferredWidth: 96
+                    Layout.preferredHeight: implicitWidth > 0 ? Layout.preferredWidth * implicitHeight / implicitWidth : 0
+                    Layout.alignment: Qt.AlignVCenter
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                    source: Qt.resolvedUrl(darkTheme ? "../brand/windoesnot-logo-hell.png" : "../brand/windoesnot-logo-dunkel.png")
+                }
+
+                Controls.Label {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: i18n("Audio") // qmllint disable
+                    font.bold: true
+                    font.pixelSize: 17
+                }
+            }
+
             Kirigami.ActionToolBar {
                 id: presetsToolBar
 
@@ -369,6 +402,22 @@ Kirigami.ApplicationWindow {
                 }
 
                 Controls.ToolButton {
+                    icon.name: "multimedia-player-symbolic"
+                    text: i18nc("Applications reproducing audio", "Players") // qmllint disable
+                    checkable: true
+                    checked: DbMain.visiblePage === 0 && DbStreamOutputs.visiblePage === 0
+                    display: segmentedButton.display
+                    visible: DbMain.visiblePage !== 2
+                    Kirigami.MnemonicData.controlType: Kirigami.MnemonicData.ActionElement
+                    onClicked: {
+                        DbMain.visiblePage = 0;
+                        DbStreamOutputs.visiblePage = 0;
+                    }
+
+                    Controls.ButtonGroup.group: navButtonGroup
+                }
+
+                Controls.ToolButton {
                     text: i18n("Output") // qmllint disable
                     icon.name: "audio-speakers-symbolic"
                     checkable: true
@@ -395,22 +444,6 @@ Kirigami.ApplicationWindow {
                     onClicked: {
                         DbMain.visiblePage = 1;
                         DbStreamInputs.visiblePage = 1;
-                    }
-
-                    Controls.ButtonGroup.group: navButtonGroup
-                }
-
-                Controls.ToolButton {
-                    icon.name: "multimedia-player-symbolic"
-                    text: i18nc("Applications reproducing audio", "Players") // qmllint disable
-                    checkable: true
-                    checked: DbMain.visiblePage === 0 && DbStreamOutputs.visiblePage === 0
-                    display: segmentedButton.display
-                    visible: DbMain.visiblePage !== 2
-                    Kirigami.MnemonicData.controlType: Kirigami.MnemonicData.ActionElement
-                    onClicked: {
-                        DbMain.visiblePage = 0;
-                        DbStreamOutputs.visiblePage = 0;
                     }
 
                     Controls.ButtonGroup.group: navButtonGroup

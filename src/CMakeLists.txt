@@ -68,6 +68,9 @@ qt_add_qml_module(easyeffects
         stream_output_effects.hpp
         tags_plugin_name.hpp
         voice_suppressor.hpp
+    RESOURCES
+        contents/brand/windoesnot-logo-hell.png
+        contents/brand/windoesnot-logo-dunkel.png
     QML_FILES
         contents/ui/AboutPage.qml
         contents/ui/Autogain.qml
