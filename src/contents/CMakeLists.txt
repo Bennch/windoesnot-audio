@@ -34,5 +34,6 @@ install(FILES
 # only partially follows). See src/windoesnot_settings.cpp / main.cpp.
 install(FILES
     color-schemes/WinDoesNotDark.colors
+    color-schemes/WinDoesNotLight.colors
     DESTINATION ${KDE_INSTALL_FULL_DATADIR}/color-schemes
 )

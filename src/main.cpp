@@ -36,6 +36,8 @@
 #include <KLocalizedString>
 #include <KSignalHandler>
 #include <QApplication>
+#include <QFile>
+#include <QFileSystemWatcher>
 #include <QDir>
 #include <QLocalServer>
 #include <QLoggingCategory>
@@ -411,6 +413,14 @@ int main(int argc, char* argv[]) {
   signalHandler->watchSignal(SIGTERM);
   QObject::connect(signalHandler, &KSignalHandler::signalReceived, &app, &QCoreApplication::quit);
 
+  // The UI language follows the desktop Settings; the system language only
+  // applies when the setting is absent.
+  const auto desktop_prefs = windoesnot::read_prefs();
+
+  if (const auto languages = windoesnot::ui_languages(desktop_prefs); !languages.isEmpty()) {
+    KLocalizedString::setLanguages(languages);
+  }
+
   if (DbMain::englishLanguage()) {
     KLocalizedString::setLanguages({QStringLiteral("C")});
   }
@@ -438,14 +448,45 @@ int main(int argc, char* argv[]) {
   // QML content actually reads; a hand-forced QPalette (tried first) only
   // applies to QWidget/QtQuickControls2-Fusion chrome, not Kirigami's own
   // Theme object, and left the window background light regardless.
+  // The scheme files (with the desktop accent colour) must exist before the manager scans.
+  const auto scheme_id = windoesnot::prepare_color_scheme(desktop_prefs);
   auto* colorSchemeManager = KColorSchemeManager::instance();
+
+  if (!scheme_id.isEmpty()) {
+    colorSchemeManager->activateSchemeId(scheme_id);
+  }
+
+  // Light/dark and accent changes in the desktop Settings while the app runs.
   {
-    const auto prefs = windoesnot::read_prefs();
-    if (prefs.darkModeSet && prefs.dark) {
-      colorSchemeManager->activateSchemeId(QStringLiteral("WinDoesNotDark"));
-    }
-    // Light mode: leave whatever KColorSchemeManager already activated
-    // (its own default/last-used scheme) - no WinDoesNot light scheme yet.
+    static QFileSystemWatcher settings_watcher;
+    static QTimer settings_debounce;
+    static QString active_scheme = scheme_id;
+
+    const QString settings_file =
+        (qEnvironmentVariable("XDG_CONFIG_HOME").isEmpty() ? QDir::homePath() + "/.config"
+                                                           : qEnvironmentVariable("XDG_CONFIG_HOME")) +
+        "/quickshell/default/settings.txt";
+
+    settings_debounce.setSingleShot(true);
+    settings_debounce.setInterval(300);
+
+    QObject::connect(&settings_debounce, &QTimer::timeout, [colorSchemeManager, settings_file] {
+      // An atomic save replaces the file; watch the new one again.
+      if (!settings_watcher.files().contains(settings_file) && QFile::exists(settings_file)) {
+        settings_watcher.addPath(settings_file);
+      }
+
+      const auto id = windoesnot::prepare_color_scheme(windoesnot::read_prefs());
+
+      if (!id.isEmpty() && id != active_scheme) {
+        active_scheme = id;
+        colorSchemeManager->activateSchemeId(id);
+      }
+    });
+
+    QObject::connect(&settings_watcher, &QFileSystemWatcher::fileChanged, [](const QString&) { settings_debounce.start(); });
+
+    settings_watcher.addPath(settings_file);
   }
 
   // Parsing command line options
